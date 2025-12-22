@@ -2,7 +2,8 @@ import { useState } from 'react'
 
 function App() {
   const FIXED_PRICE = 8500;
-  const FIXED_DEPOSIT = 850;
+  const MIN_DEPOSIT = 250;
+  const DEPOSIT_PERCENTAGE = 0.10;
   const SLIDING_SCALE_MAX = 8500;
   const SLIDING_SCALE_STEP = 250;
   const DEFAULT_MIN = 4000;
@@ -34,7 +35,7 @@ function App() {
 
   const payoffDate = getPayoffDate();
   const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
-  const deposit = FIXED_DEPOSIT;
+  const deposit = Math.max(MIN_DEPOSIT, Math.round(totalPrice * DEPOSIT_PERCENTAGE));
   const remainder = totalPrice - deposit;
   const monthlyPayment = remainder / months;
   const savings = isSlidingScale ? FIXED_PRICE - selectedPrice : 0;
