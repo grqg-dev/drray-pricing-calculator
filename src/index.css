@@ -1,0 +1,167 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --cream: #FAF8F6;
+  --taupe: #8B7E74;
+  --taupe-light: #B5A99A;
+  --charcoal: #2C2C2C;
+  --gray: #666666;
+  --gray-light: #E5E5E5;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Manrope', sans-serif;
+  background: var(--cream);
+  color: var(--charcoal);
+}
+
+#root {
+  height: 100%;
+  overflow: auto;
+}
+
+/* Custom Slider Container */
+.slider-container {
+  position: relative;
+  padding: 8px 0;
+}
+
+.slider-track-wrapper {
+  position: relative;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  margin: 0 16px;
+}
+
+.slider-track {
+  position: relative;
+  height: 8px;
+  width: 100%;
+  background: linear-gradient(to right, var(--gray-light), #E8E4E0);
+  border-radius: 4px;
+}
+
+.slider-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--taupe-light), var(--taupe));
+  border-radius: 4px;
+  transition: width 0.1s ease-out;
+}
+
+.slider-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  background: white;
+  border: 3px solid var(--taupe);
+  border-radius: 50%;
+  cursor: grab;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  z-index: 2;
+}
+
+.slider-thumb:hover {
+  transform: translate(-50%, -50%) scale(1.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-color: var(--charcoal);
+}
+
+.slider-thumb:active {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.slider-ticks {
+  position: relative;
+  height: 24px;
+  margin: 8px 16px 0;
+}
+
+.slider-tick {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.slider-tick::before {
+  content: '';
+  width: 2px;
+  height: 6px;
+  background: var(--gray-light);
+  border-radius: 1px;
+  margin-bottom: 4px;
+}
+
+.slider-tick.active::before {
+  background: var(--taupe);
+}
+
+.slider-tick span {
+  font-size: 11px;
+  color: var(--gray);
+  white-space: nowrap;
+  transition: color 0.15s ease, font-weight 0.15s ease;
+}
+
+.slider-tick.active span {
+  color: var(--taupe);
+  font-weight: 600;
+}
+
+/* Hide native range but keep it accessible */
+.slider-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 3;
+  margin: 0;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Custom date input styling */
+input[type="date"] {
+  color: var(--charcoal);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
