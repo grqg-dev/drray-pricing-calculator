@@ -3,9 +3,9 @@ import { useState } from 'react'
 function App() {
   const FIXED_PRICE = 8500;
   const FIXED_DEPOSIT = 850;
-  const SLIDING_SCALE_MIN = 4000;
   const SLIDING_SCALE_MAX = 8500;
   const SLIDING_SCALE_STEP = 250;
+  const DEFAULT_MIN = 4000;
 
   // Get URL params
   const params = new URLSearchParams(window.location.search);
@@ -13,13 +13,12 @@ function App() {
   const originalPrice = params.get('originalPrice') ? parseInt(params.get('originalPrice')) : null;
   const dueDate = params.get('dueDate') || '2026-07-30'; // Test default
 
-  // Calculate initial sliding scale price (default to $4,000 or halfway if original price is set)
+  // Minimum is the original price if provided, otherwise default to $4,000
+  const slidingScaleMin = originalPrice || DEFAULT_MIN;
+
+  // Calculate initial sliding scale price (start at minimum)
   const getInitialSlidingPrice = () => {
-    if (originalPrice) {
-      // Start at minimum of $4,000
-      return SLIDING_SCALE_MIN;
-    }
-    return SLIDING_SCALE_MIN;
+    return slidingScaleMin;
   };
 
   const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? getInitialSlidingPrice() : FIXED_PRICE);
@@ -125,7 +124,7 @@ function App() {
                       <div className="slider-track-wrapper">
                         <input
                           type="range"
-                          min={SLIDING_SCALE_MIN}
+                          min={slidingScaleMin}
                           max={SLIDING_SCALE_MAX}
                           step={SLIDING_SCALE_STEP}
                           value={selectedPrice}
@@ -135,20 +134,37 @@ function App() {
                         <div className="slider-track">
                           <div
                             className="slider-fill"
-                            style={{ width: `${((selectedPrice - SLIDING_SCALE_MIN) / (SLIDING_SCALE_MAX - SLIDING_SCALE_MIN)) * 100}%` }}
+                            style={{ width: `${((selectedPrice - slidingScaleMin) / (SLIDING_SCALE_MAX - slidingScaleMin)) * 100}%` }}
                           />
                           <div
                             className="slider-thumb"
-                            style={{ left: `${((selectedPrice - SLIDING_SCALE_MIN) / (SLIDING_SCALE_MAX - SLIDING_SCALE_MIN)) * 100}%` }}
+                            style={{ left: `${((selectedPrice - slidingScaleMin) / (SLIDING_SCALE_MAX - slidingScaleMin)) * 100}%` }}
                           />
                         </div>
                       </div>
                       <div className="slider-ticks">
-                        {[4000, 5000, 6000, 7000, 8500].map((tick) => (
+                        {(() => {
+                          // Generate tick marks: min, intermediate values, and max
+                          const ticks = [slidingScaleMin];
+                          const range = SLIDING_SCALE_MAX - slidingScaleMin;
+                          
+                          // Add intermediate ticks (roughly every $1000-1500)
+                          if (range > 2000) {
+                            const mid1 = Math.round((slidingScaleMin + SLIDING_SCALE_MAX) / 2 / SLIDING_SCALE_STEP) * SLIDING_SCALE_STEP;
+                            if (mid1 > slidingScaleMin && mid1 < SLIDING_SCALE_MAX) {
+                              ticks.push(mid1);
+                            }
+                          }
+                          
+                          // Always include max
+                          ticks.push(SLIDING_SCALE_MAX);
+                          
+                          return ticks.sort((a, b) => a - b);
+                        })().map((tick) => (
                           <div
                             key={tick}
                             className={`slider-tick ${selectedPrice >= tick ? 'active' : ''}`}
-                            style={{ left: `${((tick - SLIDING_SCALE_MIN) / (SLIDING_SCALE_MAX - SLIDING_SCALE_MIN)) * 100}%` }}
+                            style={{ left: `${((tick - slidingScaleMin) / (SLIDING_SCALE_MAX - slidingScaleMin)) * 100}%` }}
                           >
                             <span>{formatCurrency(tick)}</span>
                           </div>
