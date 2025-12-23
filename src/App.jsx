@@ -3,6 +3,7 @@ import { useState } from 'react'
 function App() {
   const FIXED_PRICE = 8500;
   const MIN_DEPOSIT = 250;
+  const MIN_MONTHLY_PAYMENT = 250;
   const DEPOSIT_PERCENTAGE = 0.10;
   const SLIDING_SCALE_MAX = 8500;
   const SLIDING_SCALE_STEP = 250;
@@ -243,19 +244,31 @@ function App() {
                 </div>
               </div>
 
-              {/* Warning Message */}
-              {dueDate && payoffDate > new Date(dueDate + 'T00:00:00') && (
-                <div className="mt-4 pt-4 border-t border-gray-light animate-fade-in">
-                  <div className="flex items-start space-x-2">
-                    <svg className="w-4 h-4 text-taupe flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-xs text-gray leading-relaxed">
-                      Note: This plan extends payment beyond your delivery date.
-                    </p>
-                  </div>
+              {/* Warning Messages */}
+              {(dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT ? (
+                <div className="mt-4 pt-4 border-t border-gray-light animate-fade-in space-y-2">
+                  {dueDate && payoffDate > new Date(dueDate + 'T00:00:00') && (
+                    <div className="flex items-start space-x-2">
+                      <svg className="w-4 h-4 text-taupe flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-xs text-gray leading-relaxed">
+                        Note: This plan extends payment beyond your delivery date.
+                      </p>
+                    </div>
+                  )}
+                  {monthlyPayment < MIN_MONTHLY_PAYMENT && (
+                    <div className="flex items-start space-x-2">
+                      <svg className="w-4 h-4 text-taupe flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-xs text-gray leading-relaxed">
+                        Note: Monthly payments below {formatCurrency(MIN_MONTHLY_PAYMENT)} may not be available. Please shorten your payment term.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
+              ) : null}
             </div>
 
           </div>
