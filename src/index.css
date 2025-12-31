@@ -212,7 +212,8 @@ body {
 }
 
 .summary-card {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   background: white;
   border-radius: 16px;
   padding: 18px 12px;
@@ -258,7 +259,7 @@ body {
 }
 
 .card-subtext {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: white;
   margin-top: 8px;
