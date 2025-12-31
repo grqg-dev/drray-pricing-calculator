@@ -47,7 +47,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   flex-shrink: 0;
 }
 
@@ -75,8 +75,8 @@ body {
 .section {
   background: white;
   border-radius: 16px;
-  padding: 16px 18px;
-  margin-bottom: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
   flex-shrink: 0;
 }
 
@@ -107,10 +107,10 @@ body {
 
 .price-value {
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 42px;
+  font-size: 34px;
   font-weight: 400;
   line-height: 1.1;
-  margin: 4px 0 12px;
+  margin: 4px 0 10px;
 }
 
 /* Slider */
@@ -210,7 +210,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   flex-shrink: 0;
 }
 
@@ -279,7 +279,8 @@ body {
 /* Summary Cards */
 .summary-cards {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .summary-card {
@@ -287,7 +288,7 @@ body {
   min-width: 0;
   background: white;
   border-radius: 16px;
-  padding: 18px 12px;
+  padding: 14px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -304,12 +305,12 @@ body {
 }
 
 .card-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--warm-gray);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .total-card .card-label {
@@ -318,7 +319,7 @@ body {
 
 .card-amount {
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 400;
   color: var(--charcoal);
   line-height: 1;
@@ -330,28 +331,29 @@ body {
 }
 
 .card-subtext {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: white;
-  margin-top: 8px;
+  margin-top: 4px;
   white-space: nowrap;
 }
 
 /* Warnings */
 .warnings {
   flex-shrink: 0;
-  margin-top: 12px;
+  margin-top: 8px;
+  margin-bottom: 8px;
   padding-top: 0;
 }
 
 .warning {
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: var(--warning-bg);
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--warning-text);
   text-align: center;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .warning:last-child {
@@ -360,13 +362,14 @@ body {
 
 /* Info Section */
 .info-section {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 10px;
   border-top: 1px solid var(--cream-dark);
+  flex-shrink: 0;
 }
 
 .info-item {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .info-item:last-child {
@@ -375,15 +378,15 @@ body {
 
 .info-item strong {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--charcoal);
   margin-bottom: 2px;
 }
 
 .info-item p {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--warm-gray);
-  line-height: 1.4;
+  line-height: 1.35;
   margin: 0;
 }

@@ -77,7 +77,7 @@ function App() {
       {/* Header */}
       <header className="header">
         <div>
-          <h1>Your Care, Your Terms</h1>
+          <h1>Payment Calculator</h1>
           <p className="header-subtitle">Choose a payment schedule that works for you</p>
         </div>
         {dueDate && (
@@ -198,11 +198,6 @@ function App() {
           <span className="card-label">{months}× Monthly</span>
           <span className="card-amount">{formatCurrency(monthlyPayment)}</span>
         </div>
-        <div className="summary-card total-card">
-          <span className="card-label">Total</span>
-          <span className="card-amount">{formatCurrency(totalPrice)}</span>
-          <span className="card-subtext">Done {formatDate(payoffDate)}</span>
-        </div>
       </div>
 
       {/* Warnings */}
@@ -242,7 +237,7 @@ function App() {
           <p>We ask that your balance be paid off one month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
         </div>
         <div className="info-item">
-          <strong>Need flexibility?</strong>
+          <strong>Need more flexibility?</strong>
           <p>Life happens. Just reach out — we're happy to work with you.</p>
         </div>
       </footer>
