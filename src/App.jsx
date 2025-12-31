@@ -4,10 +4,10 @@ function App() {
   const FIXED_PRICE = 8500;
   const MIN_DEPOSIT = 250;
   const MIN_MONTHLY_PAYMENT = 250;
-  const DEPOSIT_PERCENTAGE = 0.10;
   const SLIDING_SCALE_MAX = 8500;
   const SLIDING_SCALE_STEP = 250;
   const DEFAULT_MIN = 4000;
+  const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
 
   // Get URL params
   const params = new URLSearchParams(window.location.search);
@@ -23,6 +23,8 @@ function App() {
 
   const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? getInitialSlidingPrice() : FIXED_PRICE);
   const [months, setMonths] = useState(6);
+  const [depositPercent, setDepositPercent] = useState(0.10);
+  const [customDeposit, setCustomDeposit] = useState(null);
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -34,9 +36,20 @@ function App() {
 
   const payoffDate = getPayoffDate();
   const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
-  const deposit = Math.max(MIN_DEPOSIT, Math.round(totalPrice * DEPOSIT_PERCENTAGE));
+  
+  // Calculate deposit based on preset or custom
+  const calculatedDeposit = customDeposit !== null 
+    ? Math.max(MIN_DEPOSIT, Math.min(customDeposit, totalPrice))
+    : Math.max(MIN_DEPOSIT, Math.round(totalPrice * depositPercent));
+  const deposit = calculatedDeposit;
   const remainder = totalPrice - deposit;
   const monthlyPayment = remainder / months;
+
+  // Handle preset button click
+  const handlePresetClick = (percent) => {
+    setDepositPercent(percent);
+    setCustomDeposit(null);
+  };
 
   const formatDate = (date) => {
     return date.toLocaleDateString('en-US', {
@@ -55,7 +68,9 @@ function App() {
     }).format(amount);
   };
 
-  const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT;
+  const depositBelowMin = customDeposit !== null && customDeposit < MIN_DEPOSIT;
+  const depositExceedsTotal = customDeposit !== null && customDeposit > totalPrice;
+  const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositExceedsTotal;
 
   return (
     <div className="app">
@@ -136,6 +151,43 @@ function App() {
         </div>
       </section>
 
+      {/* Deposit Section */}
+      <div className="deposit-section">
+        <span className="label">Deposit</span>
+        <div className="deposit-buttons">
+          {DEPOSIT_PRESETS.map(percent => (
+            <button
+              key={percent}
+              className={`quick-btn ${depositPercent === percent && customDeposit === null ? 'active' : ''}`}
+              onClick={() => handlePresetClick(percent)}
+            >
+              {Math.round(percent * 100)}%
+            </button>
+          ))}
+          <input
+            type="number"
+            inputMode="numeric"
+            className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
+            placeholder="$"
+            min="0"
+            value={customDeposit !== null ? customDeposit : ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '' || value === null) {
+                setCustomDeposit(null);
+                setDepositPercent(0.10);
+              } else {
+                const num = parseInt(value);
+                if (!isNaN(num)) {
+                  setCustomDeposit(num);
+                  setDepositPercent(null);
+                }
+              }
+            }}
+          />
+        </div>
+      </div>
+
       {/* Summary Cards */}
       <div className="summary-cards">
         <div className="summary-card">
@@ -164,6 +216,16 @@ function App() {
           {monthlyPayment < MIN_MONTHLY_PAYMENT && (
             <div className="warning">
               Minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo — try fewer months
+            </div>
+          )}
+          {depositBelowMin && (
+            <div className="warning">
+              Minimum deposit is {formatCurrency(MIN_DEPOSIT)}
+            </div>
+          )}
+          {depositExceedsTotal && (
+            <div className="warning">
+              Deposit cannot exceed total price
             </div>
           )}
         </div>

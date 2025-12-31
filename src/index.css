@@ -205,6 +205,77 @@ body {
   color: white;
 }
 
+/* Deposit Section */
+.deposit-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.deposit-section .label {
+  white-space: nowrap;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.deposit-buttons {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.deposit-buttons .quick-btn {
+  flex: 1 1 0;
+  padding: 6px 4px;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.deposit-input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  padding: 6px 4px;
+  background: var(--cream);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--charcoal);
+  outline: none;
+  transition: border-color 0.15s;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.deposit-input::-webkit-outer-spin-button,
+.deposit-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.deposit-input::placeholder {
+  color: var(--warm-gray);
+}
+
+.deposit-input:focus {
+  border-color: var(--terracotta);
+}
+
+.deposit-input.active {
+  background: var(--terracotta);
+  color: white;
+  border-color: var(--terracotta);
+}
+
+.deposit-input.active::placeholder {
+  color: rgba(255,255,255,0.7);
+}
+
 /* Summary Cards */
 .summary-cards {
   display: flex;
@@ -289,8 +360,8 @@ body {
 
 /* Info Section */
 .info-section {
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--cream-dark);
 }
 
