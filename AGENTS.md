@@ -112,7 +112,7 @@ months          // Selected payment term (1-9 or 1-12 months)
   2. "Minimum payment is $250/mo — try fewer months"
 
 ### Info Section (Footer)
-- Payment Methods: ACH, debit, card via Stripe
+- Payment Methods: ACH, debit, card (ACH preferred to control fees)
 - Timing: Explains 1-month pre-due deadline
 - Need flexibility: CTA for contacting support
 

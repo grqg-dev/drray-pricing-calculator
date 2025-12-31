@@ -173,7 +173,7 @@ function App() {
       <footer className="info-section">
         <div className="info-item">
           <strong>Payment Methods</strong>
-          <p>We accept ACH, debit, and credit cards through Stripe. If you're able to pay via ACH (bank transfer), it helps us keep costs down and pass those savings on to you.</p>
+          <p>We accept ACH, debit, and credit cards, and there are never any processing fees. Please pay with ACH if possible — this helps us control fees on our end and offer no processing fees to everyone.</p>
         </div>
         <div className="info-item">
           <strong>Timing</strong>
