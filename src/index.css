@@ -46,7 +46,7 @@ body {
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: baseline;
   margin-bottom: 14px;
   flex-shrink: 0;
 }
@@ -64,9 +64,11 @@ body {
 }
 
 .due-date {
-  font-size: 12px;
-  color: var(--charcoal);
-  font-weight: 600;
+  font-size: 11px;
+  color: var(--warm-gray);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   text-align: right;
   white-space: nowrap;
 }
@@ -78,6 +80,7 @@ body {
   padding: 14px 16px;
   margin-bottom: 10px;
   flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.08);
 }
 
 /* Price Section */
@@ -191,7 +194,7 @@ body {
   flex: 1;
   padding: 8px;
   background: var(--cream);
-  border: none;
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-family: inherit;
   font-size: 14px;
@@ -203,6 +206,7 @@ body {
 .quick-btn.active {
   background: var(--terracotta);
   color: white;
+  border-color: var(--terracotta);
 }
 
 /* Deposit Section */
@@ -240,7 +244,7 @@ body {
   width: 100%;
   padding: 6px 4px;
   background: var(--cream);
-  border: 2px solid transparent;
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-family: inherit;
   font-size: 11px;
@@ -295,7 +299,7 @@ body {
   justify-content: center;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.08);
 }
 
 .summary-card.total-card {
@@ -389,4 +393,29 @@ body {
   color: var(--warm-gray);
   line-height: 1.35;
   margin: 0;
+}
+
+/* Submit Button */
+.submit-btn {
+  width: 100%;
+  padding: 14px;
+  margin-top: 16px;
+  background: var(--terracotta);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s;
+}
+
+.submit-btn:hover {
+  background: var(--terracotta-deep);
+}
+
+.submit-btn:active {
+  background: var(--terracotta-deep);
 }

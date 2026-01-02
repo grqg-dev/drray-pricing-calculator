@@ -76,10 +76,7 @@ function App() {
     <div className="app">
       {/* Header */}
       <header className="header">
-        <div>
-          <h1>Payment Calculator</h1>
-          <p className="header-subtitle">Choose a payment schedule that works for you</p>
-        </div>
+        <h1>Payment Calculator</h1>
         {dueDate && (
           <div className="due-date">
             Due Date: {formatDate(new Date(dueDate + 'T00:00:00'))}
@@ -91,7 +88,6 @@ function App() {
       <section className="section price-section">
         {isSlidingScale ? (
           <>
-            <div className="label">Your Price</div>
             <div className="price-value">{formatCurrency(selectedPrice)}</div>
             <div className="slider-wrapper">
               <input
@@ -165,7 +161,7 @@ function App() {
             type="number"
             inputMode="numeric"
             className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
-            placeholder="$"
+            placeholder="Custom"
             min="0"
             value={customDeposit !== null ? customDeposit : ''}
             onChange={(e) => {
@@ -238,6 +234,11 @@ function App() {
           <p>Life happens. Just reach out — we're happy to work with you.</p>
         </div>
       </footer>
+
+      {/* Submit Button */}
+      <button className="submit-btn">
+        Continue
+      </button>
     </div>
   );
 }
