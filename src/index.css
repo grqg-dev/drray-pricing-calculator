@@ -65,7 +65,7 @@ body {
 
 .due-date {
   font-size: 12px;
-  color: var(--terracotta);
+  color: var(--charcoal);
   font-weight: 600;
   text-align: right;
   white-space: nowrap;

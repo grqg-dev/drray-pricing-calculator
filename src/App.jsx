@@ -82,7 +82,7 @@ function App() {
         </div>
         {dueDate && (
           <div className="due-date">
-            Due {formatDate(new Date(dueDate + 'T00:00:00'))}
+            Due Date: {formatDate(new Date(dueDate + 'T00:00:00'))}
           </div>
         )}
       </header>
@@ -91,10 +91,7 @@ function App() {
       <section className="section price-section">
         {isSlidingScale ? (
           <>
-            <div className="price-header">
-              <span className="label">Your Price</span>
-              <span className="original-price">{formatCurrency(FIXED_PRICE)}</span>
-            </div>
+            <div className="label">Your Price</div>
             <div className="price-value">{formatCurrency(selectedPrice)}</div>
             <div className="slider-wrapper">
               <input
