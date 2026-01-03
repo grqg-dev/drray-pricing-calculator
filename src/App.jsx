@@ -29,6 +29,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -127,8 +128,9 @@ function App() {
         <div className="done-container">
           <div className="done-header">
             <div className="checkmark">✓</div>
-            <h1>Payment Plan Submitted</h1>
-            <p className="done-subtitle">Your payment plan has been successfully submitted.</p>
+            <h1>You're all set!</h1>
+            <p className="done-subtitle">We've saved your payment plan. We'll be in touch to confirm.</p>
+            <p className="done-note">Made a mistake? Just let us know and we'll update it.</p>
           </div>
 
           <div className="done-summary">
@@ -138,7 +140,7 @@ function App() {
             </div>
             
             <div className="done-card">
-              <span className="done-label">Today</span>
+              <span className="done-label">Deposit Today</span>
               <span className="done-value">{formatCurrency(deposit)}</span>
             </div>
             
@@ -161,7 +163,10 @@ function App() {
     <div className="app">
       {/* Header */}
       <header className="header">
-        <h1>Payment Calculator</h1>
+        <div>
+          <h1>Payment Calculator</h1>
+          <p className="header-subtitle">Choose a payment plan that works for you—no interest, no surprises.</p>
+        </div>
         {dueDate && (
           <div className="due-date">
             Due Date: {formatDate(new Date(dueDate + 'T00:00:00'))}
@@ -215,17 +220,6 @@ function App() {
             className="slider"
             style={{ '--progress': `${((months - 1) / (isExtended ? 11 : 8)) * 100}%` }}
           />
-          <div className="quick-buttons">
-            {(isExtended ? [3, 6, 9, 12] : [3, 6, 9]).map(m => (
-              <button
-                key={m}
-                className={`quick-btn ${months === m ? 'active' : ''}`}
-                onClick={() => setMonths(m)}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -269,7 +263,7 @@ function App() {
       {/* Summary Cards */}
       <div className="summary-cards">
         <div className="summary-card">
-          <span className="card-label">Today</span>
+          <span className="card-label">Deposit Today</span>
           <span className="card-amount">{formatCurrency(deposit)}</span>
         </div>
         <div className="summary-card">
@@ -283,12 +277,12 @@ function App() {
         <div className="warnings">
           {dueDate && payoffDate > new Date(dueDate + 'T00:00:00') && (
             <div className="warning">
-              Payment extends past your due date
+              This plan extends past your due date—adjust months to finish earlier.
             </div>
           )}
           {monthlyPayment < MIN_MONTHLY_PAYMENT && (
             <div className="warning">
-              Minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo — try fewer months
+              The minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.
             </div>
           )}
           {depositBelowMin && (
@@ -308,15 +302,15 @@ function App() {
       <footer className="info-section">
         <div className="info-item">
           <strong>Payment Methods</strong>
-          <p>We accept ACH, debit, and credit cards, and there are never any processing fees. Please pay with ACH if possible — this helps us control fees on our end and offer no processing fees to everyone.</p>
+          <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
         </div>
         <div className="info-item">
           <strong>Timing</strong>
-          <p>We ask that your balance be paid off one month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
+          <p>We typically ask that your balance be paid off 1 month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
         </div>
         <div className="info-item">
           <strong>Need more flexibility?</strong>
-          <p>Life happens. Just reach out — we're happy to work with you.</p>
+          <p>Monthly payments are just our default — we can adjust the schedule or payoff date to fit your situation. <button className="contact-link" onClick={() => setShowContactModal(true)}>Contact us</button></p>
         </div>
       </footer>
 
@@ -326,7 +320,7 @@ function App() {
         onClick={handleSubmit}
         disabled={isSubmitting || hasWarning}
       >
-        {isSubmitting ? 'Submitting...' : 'Submit'}
+        {isSubmitting ? 'Saving...' : 'Save'}
       </button>
 
       {/* Success Message */}
@@ -340,6 +334,26 @@ function App() {
       {submitError && (
         <div className="error-message">
           {submitError}
+        </div>
+      )}
+
+      {/* Contact Modal */}
+      {showContactModal && (
+        <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowContactModal(false)}>×</button>
+            <h2>Contact Us</h2>
+            <div className="contact-info">
+              <div className="contact-item">
+                <strong>Phone</strong>
+                <a href="tel:8053640996">805 364-0996</a>
+              </div>
+              <div className="contact-item">
+                <strong>Email</strong>
+                <a href="mailto:hello@drjuliaray.com">hello@drjuliaray.com</a>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
