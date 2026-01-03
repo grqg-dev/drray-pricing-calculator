@@ -160,12 +160,12 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${isSlidingScale ? 'sliding-scale-mode' : ''}`}>
       {/* Header */}
       <header className="header">
         <div>
           <h1>Payment Calculator</h1>
-          <p className="header-subtitle">Choose a payment plan that works for you—no interest, no surprises.</p>
+          <p className="header-subtitle">Choose a payment plan that works for you</p>
         </div>
         {dueDate && (
           <div className="due-date">
