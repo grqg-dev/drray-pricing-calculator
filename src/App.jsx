@@ -8,6 +8,7 @@ function App() {
   const SLIDING_SCALE_STEP = 250;
   const DEFAULT_MIN = 4000;
   const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
+  const WEBHOOK_URL = 'https://hook.us2.make.com/5xso5d5tyu3ubbz45isvoohto6jx1mfo';
 
   // Get URL params
   const params = new URLSearchParams(window.location.search);
@@ -25,6 +26,9 @@ function App() {
   const [months, setMonths] = useState(6);
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -71,6 +75,87 @@ function App() {
   const depositBelowMin = customDeposit !== null && customDeposit < MIN_DEPOSIT;
   const depositExceedsTotal = customDeposit !== null && customDeposit > totalPrice;
   const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositExceedsTotal;
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (isSubmitting || hasWarning) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const payload = {
+      totalPrice,
+      deposit,
+      monthlyPayment,
+      months,
+      payoffDate: payoffDate.toISOString(),
+      dueDate: dueDate || null,
+      isSlidingScale,
+      originalPrice: originalPrice || null,
+      isExtended,
+      timestamp: new Date().toISOString(),
+      depositPercent: customDeposit === null ? depositPercent : null,
+      customDeposit: customDeposit !== null ? customDeposit : null
+    };
+
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setSubmitSuccess(true);
+    } catch (error) {
+      console.error('Submission error:', error);
+      setSubmitError(error.message || 'Failed to submit. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // If submission was successful, show Done view
+  if (submitSuccess) {
+    return (
+      <div className="app done-view">
+        <div className="done-container">
+          <div className="done-header">
+            <div className="checkmark">✓</div>
+            <h1>Payment Plan Submitted</h1>
+            <p className="done-subtitle">Your payment plan has been successfully submitted.</p>
+          </div>
+
+          <div className="done-summary">
+            <div className="done-card">
+              <span className="done-label">Total</span>
+              <span className="done-value">{formatCurrency(totalPrice)}</span>
+            </div>
+            
+            <div className="done-card">
+              <span className="done-label">Today</span>
+              <span className="done-value">{formatCurrency(deposit)}</span>
+            </div>
+            
+            <div className="done-card">
+              <span className="done-label">{months}× Monthly</span>
+              <span className="done-value">{formatCurrency(monthlyPayment)}</span>
+            </div>
+            
+            <div className="done-card">
+              <span className="done-label">Payoff Date</span>
+              <span className="done-value">{formatDate(payoffDate)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -236,9 +321,27 @@ function App() {
       </footer>
 
       {/* Submit Button */}
-      <button className="submit-btn">
-        Continue
+      <button 
+        className="submit-btn"
+        onClick={handleSubmit}
+        disabled={isSubmitting || hasWarning}
+      >
+        {isSubmitting ? 'Submitting...' : 'Submit'}
       </button>
+
+      {/* Success Message */}
+      {submitSuccess && (
+        <div className="success-message">
+          Payment plan submitted successfully!
+        </div>
+      )}
+
+      {/* Error Message */}
+      {submitError && (
+        <div className="error-message">
+          {submitError}
+        </div>
+      )}
     </div>
   );
 }
