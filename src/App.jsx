@@ -25,6 +25,15 @@ function App() {
   const [months, setMonths] = useState(6);
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);
+<<<<<<< Updated upstream
+=======
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [patientName, setPatientName] = useState('');
+>>>>>>> Stashed changes
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -72,6 +81,103 @@ function App() {
   const depositExceedsTotal = customDeposit !== null && customDeposit > totalPrice;
   const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositExceedsTotal;
 
+<<<<<<< Updated upstream
+=======
+  // Handle form submission - show name modal
+  const handleSubmit = () => {
+    if (isSubmitting || hasWarning) return;
+    setShowNameModal(true);
+  };
+
+  // Submit with name to webhook
+  const submitWithName = async () => {
+    const trimmedName = patientName.trim();
+    if (!trimmedName) {
+      setSubmitError('Please enter your name');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const payload = {
+      name: trimmedName,
+      totalPrice,
+      deposit,
+      monthlyPayment,
+      months,
+      payoffDate: payoffDate.toISOString(),
+      dueDate: dueDate || null,
+      isSlidingScale,
+      originalPrice: originalPrice || null,
+      isExtended,
+      timestamp: new Date().toISOString(),
+      depositPercent: customDeposit === null ? depositPercent : null,
+      customDeposit: customDeposit !== null ? customDeposit : null
+    };
+
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setShowNameModal(false);
+      setSubmitSuccess(true);
+    } catch (error) {
+      console.error('Submission error:', error);
+      setSubmitError(error.message || 'Failed to submit. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // If submission was successful, show Done view
+  if (submitSuccess) {
+    return (
+      <div className="app done-view">
+        <div className="done-container">
+          <div className="done-header">
+            <div className="checkmark">✓</div>
+            <h1>You're all set!</h1>
+            <p className="done-subtitle">We've saved your payment plan. We'll be in touch to confirm.</p>
+            <p className="done-note">Made a mistake? Just let us know and we'll update it.</p>
+          </div>
+
+          <div className="done-summary">
+            <div className="done-card">
+              <span className="done-label">Total</span>
+              <span className="done-value">{formatCurrency(totalPrice)}</span>
+            </div>
+            
+            <div className="done-card">
+              <span className="done-label">Deposit Today</span>
+              <span className="done-value">{formatCurrency(deposit)}</span>
+            </div>
+            
+            <div className="done-card">
+              <span className="done-label">{months}× Monthly</span>
+              <span className="done-value">{formatCurrency(monthlyPayment)}</span>
+            </div>
+            
+            <div className="done-card">
+              <span className="done-label">Payoff Date</span>
+              <span className="done-value">{formatDate(payoffDate)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+>>>>>>> Stashed changes
   return (
     <div className="app">
       {/* Header */}
@@ -238,6 +344,115 @@ function App() {
           <p>Life happens. Just reach out — we're happy to work with you.</p>
         </div>
       </footer>
+<<<<<<< Updated upstream
+=======
+
+      {/* Submit Button */}
+      <button 
+        className="submit-btn"
+        onClick={handleSubmit}
+        disabled={isSubmitting || hasWarning}
+      >
+        {isSubmitting ? 'Saving...' : 'Save'}
+      </button>
+
+      {/* Success Message */}
+      {submitSuccess && (
+        <div className="success-message">
+          Payment plan submitted successfully!
+        </div>
+      )}
+
+      {/* Error Message */}
+      {submitError && (
+        <div className="error-message">
+          {submitError}
+        </div>
+      )}
+
+      {/* Contact Modal */}
+      {showContactModal && (
+        <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowContactModal(false)}>×</button>
+            <h2>Contact Us</h2>
+            <div className="contact-info">
+              <div className="contact-item">
+                <strong>Phone</strong>
+                <a href="tel:8053640996">805 364-0996</a>
+              </div>
+              <div className="contact-item">
+                <strong>Email</strong>
+                <a href="mailto:hello@drjuliaray.com">hello@drjuliaray.com</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Name Entry Modal */}
+      {showNameModal && (
+        <div className="modal-overlay" onClick={() => {
+          if (!isSubmitting) {
+            setShowNameModal(false);
+            setPatientName('');
+          }
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button 
+              className="modal-close" 
+              onClick={() => {
+                if (!isSubmitting) {
+                  setShowNameModal(false);
+                  setPatientName('');
+                }
+              }}
+              disabled={isSubmitting}
+            >
+              ×
+            </button>
+            <h2>Enter Your Name</h2>
+            <div className="name-input-wrapper">
+              <input
+                type="text"
+                className="name-input"
+                placeholder="Your name"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && patientName.trim() && !isSubmitting) {
+                    submitWithName();
+                  }
+                }}
+                disabled={isSubmitting}
+                autoFocus
+              />
+            </div>
+            <div className="modal-actions">
+              <button
+                className="modal-cancel-btn"
+                onClick={() => {
+                  if (!isSubmitting) {
+                    setShowNameModal(false);
+                    setPatientName('');
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-submit-btn"
+                onClick={submitWithName}
+                disabled={!patientName.trim() || isSubmitting}
+              >
+                {isSubmitting ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+>>>>>>> Stashed changes
     </div>
   );
 }

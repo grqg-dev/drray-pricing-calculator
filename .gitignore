@@ -27,3 +27,7 @@ dist-ssr
 .amplify
 amplify.yml
 
+# UI/UX Pro Max
+.cursor/
+.shared/
+
