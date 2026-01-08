@@ -8,6 +8,7 @@ function App() {
   const SLIDING_SCALE_STEP = 250;
   const DEFAULT_MIN = 4000;
   const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
+  const WEBHOOK_URL = 'https://hook.us2.make.com/5xso5d5tyu3ubbz45isvoohto6jx1mfo';
 
   // Get URL params
   const params = new URLSearchParams(window.location.search);
@@ -25,15 +26,12 @@ function App() {
   const [months, setMonths] = useState(6);
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);
-<<<<<<< Updated upstream
-=======
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [patientName, setPatientName] = useState('');
->>>>>>> Stashed changes
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -81,8 +79,6 @@ function App() {
   const depositExceedsTotal = customDeposit !== null && customDeposit > totalPrice;
   const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositExceedsTotal;
 
-<<<<<<< Updated upstream
-=======
   // Handle form submission - show name modal
   const handleSubmit = () => {
     if (isSubmitting || hasWarning) return;
@@ -177,14 +173,13 @@ function App() {
     );
   }
 
->>>>>>> Stashed changes
   return (
-    <div className="app">
+    <div className={`app ${isSlidingScale ? 'sliding-scale-mode' : ''}`}>
       {/* Header */}
       <header className="header">
         <div>
           <h1>Payment Calculator</h1>
-          <p className="header-subtitle">Choose a payment schedule that works for you</p>
+          <p className="header-subtitle">Choose a payment plan that works for you</p>
         </div>
         {dueDate && (
           <div className="due-date">
@@ -197,7 +192,6 @@ function App() {
       <section className="section price-section">
         {isSlidingScale ? (
           <>
-            <div className="label">Your Price</div>
             <div className="price-value">{formatCurrency(selectedPrice)}</div>
             <div className="slider-wrapper">
               <input
@@ -240,17 +234,6 @@ function App() {
             className="slider"
             style={{ '--progress': `${((months - 1) / (isExtended ? 11 : 8)) * 100}%` }}
           />
-          <div className="quick-buttons">
-            {(isExtended ? [3, 6, 9, 12] : [3, 6, 9]).map(m => (
-              <button
-                key={m}
-                className={`quick-btn ${months === m ? 'active' : ''}`}
-                onClick={() => setMonths(m)}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -271,7 +254,7 @@ function App() {
             type="number"
             inputMode="numeric"
             className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
-            placeholder="$"
+            placeholder="Custom"
             min="0"
             value={customDeposit !== null ? customDeposit : ''}
             onChange={(e) => {
@@ -294,7 +277,7 @@ function App() {
       {/* Summary Cards */}
       <div className="summary-cards">
         <div className="summary-card">
-          <span className="card-label">Today</span>
+          <span className="card-label">Deposit Today</span>
           <span className="card-amount">{formatCurrency(deposit)}</span>
         </div>
         <div className="summary-card">
@@ -308,12 +291,12 @@ function App() {
         <div className="warnings">
           {dueDate && payoffDate > new Date(dueDate + 'T00:00:00') && (
             <div className="warning">
-              Payment extends past your due date
+              This plan extends past your due date—adjust months to finish earlier.
             </div>
           )}
           {monthlyPayment < MIN_MONTHLY_PAYMENT && (
             <div className="warning">
-              Minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo — try fewer months
+              The minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.
             </div>
           )}
           {depositBelowMin && (
@@ -333,19 +316,17 @@ function App() {
       <footer className="info-section">
         <div className="info-item">
           <strong>Payment Methods</strong>
-          <p>We accept ACH, debit, and credit cards, and there are never any processing fees. Please pay with ACH if possible — this helps us control fees on our end and offer no processing fees to everyone.</p>
+          <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
         </div>
         <div className="info-item">
           <strong>Timing</strong>
-          <p>We ask that your balance be paid off one month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
+          <p>We typically ask that your balance be paid off 1 month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
         </div>
         <div className="info-item">
           <strong>Need more flexibility?</strong>
-          <p>Life happens. Just reach out — we're happy to work with you.</p>
+          <p>Monthly payments are just our default — we can adjust the schedule or payoff date to fit your situation. <button className="contact-link" onClick={() => setShowContactModal(true)}>Contact us</button></p>
         </div>
       </footer>
-<<<<<<< Updated upstream
-=======
 
       {/* Submit Button */}
       <button 
@@ -452,7 +433,6 @@ function App() {
           </div>
         </div>
       )}
->>>>>>> Stashed changes
     </div>
   );
 }

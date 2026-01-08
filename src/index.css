@@ -28,6 +28,8 @@ body {
   background: var(--cream);
   color: var(--charcoal);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* App Container - fits iPhone 14 (390x844) without scroll */
@@ -36,23 +38,20 @@ body {
   max-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 16px 20px 24px;
+  padding: 20px 20px 32px;
   max-width: 400px;
   margin: 0 auto;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Header */
 .header {
   display: flex;
   justify-content: space-between;
-<<<<<<< Updated upstream
-  align-items: flex-start;
-  margin-bottom: 14px;
-=======
   align-items: baseline;
   margin-bottom: 4px;
->>>>>>> Stashed changes
   flex-shrink: 0;
 }
 
@@ -69,9 +68,11 @@ body {
 }
 
 .due-date {
-  font-size: 12px;
-  color: var(--charcoal);
-  font-weight: 600;
+  font-size: 11px;
+  color: var(--warm-gray);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   text-align: right;
   white-space: nowrap;
 }
@@ -83,6 +84,7 @@ body {
   padding: 14px 16px;
   margin-bottom: 10px;
   flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.08);
 }
 
 /* Price Section */
@@ -115,19 +117,20 @@ body {
   font-size: 34px;
   font-weight: 400;
   line-height: 1.1;
-  margin: 4px 0 10px;
+  margin: 4px 0 8px;
 }
 
 /* Slider */
 .slider-wrapper {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding: 4px 0;
 }
 
 .slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 10px;
+  height: 12px;
   background: linear-gradient(
     to right,
     var(--terracotta) 0%,
@@ -138,30 +141,43 @@ body {
   border-radius: 100px;
   outline: none;
   cursor: pointer;
+  touch-action: none;
 }
 
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   background: white;
   border: 3px solid var(--terracotta);
   border-radius: 50%;
   cursor: grab;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  touch-action: none;
 }
 
 .slider::-webkit-slider-thumb:active {
   cursor: grabbing;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .slider::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   background: white;
   border: 3px solid var(--terracotta);
   border-radius: 50%;
   cursor: grab;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  touch-action: none;
+}
+
+.slider::-moz-range-thumb:active {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .slider-labels {
@@ -186,35 +202,39 @@ body {
   font-weight: 400;
 }
 
-.quick-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
 .quick-btn {
   flex: 1;
-  padding: 8px;
+  min-height: 44px;
+  padding: 12px 8px;
   background: var(--cream);
-  border: none;
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
   color: var(--warm-gray);
   cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.quick-btn:active {
+  transform: scale(0.98);
 }
 
 .quick-btn.active {
   background: var(--terracotta);
   color: white;
+  border-color: var(--terracotta);
 }
 
 /* Deposit Section */
 .deposit-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 10px;
   flex-shrink: 0;
 }
@@ -227,34 +247,37 @@ body {
 
 .deposit-buttons {
   display: flex;
-  gap: 5px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
 
 .deposit-buttons .quick-btn {
   flex: 1 1 0;
-  padding: 6px 4px;
-  font-size: 11px;
+  min-height: 44px;
+  padding: 12px 8px;
+  font-size: 13px;
   min-width: 0;
 }
 
 .deposit-input {
   flex: 1 1 0;
   min-width: 0;
+  min-height: 44px;
   width: 100%;
-  padding: 6px 4px;
+  padding: 12px 8px;
   background: var(--cream);
-  border: 2px solid transparent;
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--charcoal);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
   text-align: center;
   -moz-appearance: textfield;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .deposit-input::-webkit-outer-spin-button,
@@ -284,23 +307,27 @@ body {
 /* Summary Cards */
 .summary-cards {
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .summary-card {
   flex: 1 1 0;
   min-width: 0;
-  background: white;
+  min-height: 72px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
-  padding: 14px 10px;
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .summary-card.total-card {
@@ -324,7 +351,7 @@ body {
 
 .card-amount {
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 400;
   color: var(--charcoal);
   line-height: 1;
@@ -367,14 +394,14 @@ body {
 
 /* Info Section */
 .info-section {
-  margin-top: 8px;
-  padding-top: 10px;
+  margin-top: 6px;
+  padding-top: 8px;
   border-top: 1px solid var(--cream-dark);
   flex-shrink: 0;
 }
 
 .info-item {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .info-item:last-child {
@@ -395,8 +422,6 @@ body {
   line-height: 1.35;
   margin: 0;
 }
-<<<<<<< Updated upstream
-=======
 
 .contact-link {
   background: none;
@@ -797,4 +822,3 @@ body {
 .sliding-scale-mode .submit-btn {
   margin-top: 10px;
 }
->>>>>>> Stashed changes
