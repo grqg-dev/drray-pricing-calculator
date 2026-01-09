@@ -44,10 +44,14 @@ function App() {
   const payoffDate = getPayoffDate();
   const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
   
+  // Minimum deposit: 10% of total (unless in sliding scale mode), but never less than $250
+  const minDepositPercent = isSlidingScale ? 0 : 0.10;
+  const minDepositAmount = Math.max(MIN_DEPOSIT, Math.round(totalPrice * minDepositPercent));
+  
   // Calculate deposit based on preset or custom
   const calculatedDeposit = customDeposit !== null 
-    ? Math.max(MIN_DEPOSIT, Math.min(customDeposit, totalPrice))
-    : Math.max(MIN_DEPOSIT, Math.round(totalPrice * depositPercent));
+    ? Math.max(minDepositAmount, Math.min(customDeposit, totalPrice))
+    : Math.max(minDepositAmount, Math.round(totalPrice * depositPercent));
   const deposit = calculatedDeposit;
   const remainder = totalPrice - deposit;
   const monthlyPayment = remainder / months;
@@ -75,9 +79,10 @@ function App() {
     }).format(amount);
   };
 
-  const depositBelowMin = customDeposit !== null && customDeposit < MIN_DEPOSIT;
+  const depositBelowMin = customDeposit !== null && customDeposit < minDepositAmount;
+  const depositBelowPercent = !isSlidingScale && deposit < Math.round(totalPrice * 0.10);
   const depositExceedsTotal = customDeposit !== null && customDeposit > totalPrice;
-  const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositExceedsTotal;
+  const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositBelowPercent || depositExceedsTotal;
 
   // Handle form submission - show name modal
   const handleSubmit = () => {
@@ -255,7 +260,7 @@ function App() {
             inputMode="numeric"
             className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
             placeholder="Custom"
-            min="0"
+            min={minDepositAmount}
             value={customDeposit !== null ? customDeposit : ''}
             onChange={(e) => {
               const value = e.target.value;
@@ -301,7 +306,12 @@ function App() {
           )}
           {depositBelowMin && (
             <div className="warning">
-              Minimum deposit is {formatCurrency(MIN_DEPOSIT)}
+              Minimum deposit is {formatCurrency(minDepositAmount)}
+            </div>
+          )}
+          {depositBelowPercent && !depositBelowMin && (
+            <div className="warning">
+              Minimum down payment is 10% ({formatCurrency(Math.round(totalPrice * 0.10))})
             </div>
           )}
           {depositExceedsTotal && (
