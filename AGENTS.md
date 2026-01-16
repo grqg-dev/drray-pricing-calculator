@@ -48,6 +48,14 @@ The DrRay Pricing Calculator is a React-based web application that allows patien
   - Default: 9-month maximum
   - Effects: Adds 12-month quick button, extends slider range
 
+- **`maxPrice`** (integer, optional)
+  - Value: Maximum price in dollars to override the default $8,500
+  - Default: $8,500
+  - Effects: 
+    - Overrides both fixed price (when not in sliding scale mode)
+    - Overrides sliding scale maximum (when in sliding scale mode)
+  - Example: `maxPrice=10000` sets both fixed and sliding scale max to $10,000
+
 ### Example URLs
 ```
 # Basic fixed price
@@ -61,6 +69,12 @@ https://app.example.com/?dueDate=2026-06-30
 
 # Full featured
 https://app.example.com/?slidingScale=true&originalPrice=6500&dueDate=2026-08-15&extended=true
+
+# Override default price to $10,000
+https://app.example.com/?maxPrice=10000
+
+# Custom price with sliding scale
+https://app.example.com/?slidingScale=true&originalPrice=5000&maxPrice=12000
 ```
 
 ## Component Structure
@@ -203,11 +217,13 @@ None currently configured. All values are hardcoded constants in App.jsx:
 ### Changing Pricing Structure
 Edit constants in App.jsx (lines 4-10):
 ```javascript
-const FIXED_PRICE = 8500;           // Change fixed price here
+const DEFAULT_FIXED_PRICE = 8500;   // Default fixed price (can be overridden via maxPrice URL param)
 const MIN_DEPOSIT = 250;            // Change minimum deposit
 const DEPOSIT_PERCENTAGE = 0.10;    // Change deposit calculation
-const SLIDING_SCALE_MAX = 8500;     // Change max sliding price
+const DEFAULT_SLIDING_SCALE_MAX = 8500; // Default max sliding price (can be overridden via maxPrice URL param)
 ```
+
+**Note:** You can also override prices dynamically via the `maxPrice` URL parameter without changing code.
 
 ### Modifying Styling
 Edit `src/index.css`:

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
 function App() {
-  const FIXED_PRICE = 8500;
+  const DEFAULT_FIXED_PRICE = 8500;
   const MIN_DEPOSIT = 250;
   const MIN_MONTHLY_PAYMENT = 250;
-  const SLIDING_SCALE_MAX = 8500;
+  const DEFAULT_SLIDING_SCALE_MAX = 8500;
   const SLIDING_SCALE_STEP = 250;
   const DEFAULT_MIN = 4000;
   const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
@@ -16,6 +16,11 @@ function App() {
   const originalPrice = params.get('originalPrice') ? parseInt(params.get('originalPrice')) : null;
   const dueDate = params.get('dueDate') || null;
   const isExtended = params.get('extended') === 'true';
+  const maxPrice = params.get('maxPrice') ? parseInt(params.get('maxPrice')) : null;
+  
+  // Override prices if maxPrice parameter is provided
+  const FIXED_PRICE = maxPrice || DEFAULT_FIXED_PRICE;
+  const SLIDING_SCALE_MAX = maxPrice || DEFAULT_SLIDING_SCALE_MAX;
 
   // Minimum is the original price if provided, otherwise default to $4,000
   const slidingScaleMin = originalPrice || DEFAULT_MIN;
