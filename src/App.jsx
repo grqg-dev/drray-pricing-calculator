@@ -172,11 +172,6 @@ function App() {
               <span className="done-label">{months}× Monthly</span>
               <span className="done-value">{formatCurrency(monthlyPayment)}</span>
             </div>
-            
-            <div className="done-card">
-              <span className="done-label">Payoff Date</span>
-              <span className="done-value">{formatDate(payoffDate)}</span>
-            </div>
           </div>
         </div>
       </div>
