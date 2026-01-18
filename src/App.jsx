@@ -37,6 +37,7 @@ function App() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [patientName, setPatientName] = useState('');
+  const [patientEmail, setPatientEmail] = useState('');
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -95,11 +96,28 @@ function App() {
     setShowNameModal(true);
   };
 
-  // Submit with name to webhook
+  // Simple email validation
+  const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  // Submit with name and email to webhook
   const submitWithName = async () => {
     const trimmedName = patientName.trim();
+    const trimmedEmail = patientEmail.trim();
+
     if (!trimmedName) {
       setSubmitError('Please enter your name');
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setSubmitError('Please enter your email');
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      setSubmitError('Please enter a valid email address');
       return;
     }
 
@@ -108,6 +126,7 @@ function App() {
 
     const payload = {
       name: trimmedName,
+      email: trimmedEmail,
       totalPrice,
       deposit,
       monthlyPayment,
@@ -381,28 +400,30 @@ function App() {
         </div>
       )}
 
-      {/* Name Entry Modal */}
+      {/* Name & Email Entry Modal */}
       {showNameModal && (
         <div className="modal-overlay" onClick={() => {
           if (!isSubmitting) {
             setShowNameModal(false);
             setPatientName('');
+            setPatientEmail('');
           }
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button 
-              className="modal-close" 
+            <button
+              className="modal-close"
               onClick={() => {
                 if (!isSubmitting) {
                   setShowNameModal(false);
                   setPatientName('');
+                  setPatientEmail('');
                 }
               }}
               disabled={isSubmitting}
             >
               ×
             </button>
-            <h2>Enter Your Name</h2>
+            <h2>Enter Your Details</h2>
             <div className="name-input-wrapper">
               <input
                 type="text"
@@ -410,15 +431,28 @@ function App() {
                 placeholder="Your name"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
+                disabled={isSubmitting}
+                autoFocus
+              />
+              <input
+                type="email"
+                className="name-input"
+                placeholder="Your email"
+                value={patientEmail}
+                onChange={(e) => setPatientEmail(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && patientName.trim() && !isSubmitting) {
+                  if (e.key === 'Enter' && patientName.trim() && patientEmail.trim() && !isSubmitting) {
                     submitWithName();
                   }
                 }}
                 disabled={isSubmitting}
-                autoFocus
               />
             </div>
+            {submitError && (
+              <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
+                {submitError}
+              </div>
+            )}
             <div className="modal-actions">
               <button
                 className="modal-cancel-btn"
@@ -426,6 +460,8 @@ function App() {
                   if (!isSubmitting) {
                     setShowNameModal(false);
                     setPatientName('');
+                    setPatientEmail('');
+                    setSubmitError(null);
                   }
                 }}
                 disabled={isSubmitting}
@@ -435,7 +471,7 @@ function App() {
               <button
                 className="modal-submit-btn"
                 onClick={submitWithName}
-                disabled={!patientName.trim() || isSubmitting}
+                disabled={!patientName.trim() || !patientEmail.trim() || isSubmitting}
               >
                 {isSubmitting ? 'Saving...' : 'Submit'}
               </button>
