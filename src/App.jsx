@@ -38,6 +38,7 @@ function App() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [patientName, setPatientName] = useState('');
   const [patientEmail, setPatientEmail] = useState('');
+  const [paymentOption, setPaymentOption] = useState(null); // 'full' or 'plan'
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -128,17 +129,18 @@ function App() {
       name: trimmedName,
       email: trimmedEmail,
       totalPrice,
-      deposit,
-      monthlyPayment,
-      months,
-      payoffDate: payoffDate.toISOString(),
+      paymentOption,
+      deposit: paymentOption === 'full' ? totalPrice : deposit,
+      monthlyPayment: paymentOption === 'full' ? 0 : monthlyPayment,
+      months: paymentOption === 'full' ? 0 : months,
+      payoffDate: paymentOption === 'full' ? null : payoffDate.toISOString(),
       dueDate: dueDate || null,
       isSlidingScale,
       originalPrice: originalPrice || null,
       isExtended,
       timestamp: new Date().toISOString(),
-      depositPercent: customDeposit === null ? depositPercent : null,
-      customDeposit: customDeposit !== null ? customDeposit : null
+      depositPercent: paymentOption === 'plan' && customDeposit === null ? depositPercent : null,
+      customDeposit: paymentOption === 'plan' && customDeposit !== null ? customDeposit : null
     };
 
     try {
@@ -172,7 +174,11 @@ function App() {
           <div className="done-header">
             <div className="checkmark">✓</div>
             <h1>You're all set!</h1>
-            <p className="done-subtitle">We've saved your payment plan. We'll be in touch to confirm.</p>
+            <p className="done-subtitle">
+              {paymentOption === 'full'
+                ? "We've saved your information. We'll be in touch to confirm payment."
+                : "We've saved your payment plan. We'll be in touch to confirm."}
+            </p>
             <p className="done-note">Made a mistake? Just let us know and we'll update it.</p>
           </div>
 
@@ -181,16 +187,20 @@ function App() {
               <span className="done-label">Total</span>
               <span className="done-value">{formatCurrency(totalPrice)}</span>
             </div>
-            
-            <div className="done-card">
-              <span className="done-label">Deposit Today</span>
-              <span className="done-value">{formatCurrency(deposit)}</span>
-            </div>
-            
-            <div className="done-card">
-              <span className="done-label">{months}× Monthly</span>
-              <span className="done-value">{formatCurrency(monthlyPayment)}</span>
-            </div>
+
+            {paymentOption === 'plan' && (
+              <>
+                <div className="done-card">
+                  <span className="done-label">Deposit Today</span>
+                  <span className="done-value">{formatCurrency(deposit)}</span>
+                </div>
+
+                <div className="done-card">
+                  <span className="done-label">{months}× Monthly</span>
+                  <span className="done-value">{formatCurrency(monthlyPayment)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -211,6 +221,120 @@ function App() {
           </div>
         )}
       </header>
+
+      {/* Payment Option Selection */}
+      {paymentOption === null && (
+        <section className="section payment-option-section">
+          <div className="label" style={{ marginBottom: '16px' }}>How would you like to pay?</div>
+          <div className="payment-options">
+            <button
+              className="payment-option-btn"
+              onClick={() => setPaymentOption('full')}
+            >
+              <div className="option-title">Pay in Full</div>
+              <div className="option-description">Pay the full amount upfront</div>
+            </button>
+            <button
+              className="payment-option-btn"
+              onClick={() => setPaymentOption('plan')}
+            >
+              <div className="option-title">Payment Plan</div>
+              <div className="option-description">Split into monthly payments</div>
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Full Payment Option */}
+      {paymentOption === 'full' && (
+        <>
+          {/* Price Section */}
+          <section className="section price-section">
+            {isSlidingScale ? (
+              <>
+                <div className="price-value">{formatCurrency(selectedPrice)}</div>
+                <div className="slider-wrapper">
+                  <input
+                    type="range"
+                    min={slidingScaleMin}
+                    max={SLIDING_SCALE_MAX}
+                    step={SLIDING_SCALE_STEP}
+                    value={selectedPrice}
+                    onChange={(e) => setSelectedPrice(parseInt(e.target.value))}
+                    className="slider"
+                    style={{ '--progress': `${((selectedPrice - slidingScaleMin) / (SLIDING_SCALE_MAX - slidingScaleMin)) * 100}%` }}
+                  />
+                  <div className="slider-labels">
+                    <span>{formatCurrency(slidingScaleMin)}</span>
+                    <span>{formatCurrency(SLIDING_SCALE_MAX)}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="label">Total</div>
+                <div className="price-value">{formatCurrency(FIXED_PRICE)}</div>
+              </>
+            )}
+          </section>
+
+          {/* Name & Email Form */}
+          <section className="section">
+            <div className="label" style={{ marginBottom: '12px' }}>Your Details</div>
+            <div className="name-input-wrapper">
+              <input
+                type="text"
+                className="name-input"
+                placeholder="Your name"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+              />
+              <input
+                type="email"
+                className="name-input"
+                placeholder="Your email"
+                value={patientEmail}
+                onChange={(e) => setPatientEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && patientName.trim() && patientEmail.trim() && !isSubmitting) {
+                    submitWithName();
+                  }
+                }}
+              />
+            </div>
+            {submitError && (
+              <div className="error-message" style={{ marginTop: '12px' }}>
+                {submitError}
+              </div>
+            )}
+          </section>
+
+          {/* Info Section */}
+          <footer className="info-section">
+            <div className="info-item">
+              <strong>Payment Methods</strong>
+              <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
+            </div>
+            <div className="info-item">
+              <strong>Need a payment plan instead?</strong>
+              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to payment plan</button></p>
+            </div>
+          </footer>
+
+          {/* Submit Button */}
+          <button
+            className="submit-btn"
+            onClick={submitWithName}
+            disabled={isSubmitting || !patientName.trim() || !patientEmail.trim()}
+          >
+            {isSubmitting ? 'Saving...' : 'Submit'}
+          </button>
+        </>
+      )}
+
+      {/* Payment Plan Option */}
+      {paymentOption === 'plan' && (
+        <>
 
       {/* Price Section */}
       <section className="section price-section">
@@ -341,43 +465,49 @@ function App() {
         </div>
       )}
 
-      {/* Info Section */}
-      <footer className="info-section">
-        <div className="info-item">
-          <strong>Payment Methods</strong>
-          <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
-        </div>
-        <div className="info-item">
-          <strong>Timing</strong>
-          <p>We typically ask that your balance be paid off 1 month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
-        </div>
-        <div className="info-item">
-          <strong>Need more flexibility?</strong>
-          <p>Monthly payments are just our default — we can adjust the schedule or payoff date to fit your situation. <button className="contact-link" onClick={() => setShowContactModal(true)}>Contact us</button></p>
-        </div>
-      </footer>
+          {/* Info Section */}
+          <footer className="info-section">
+            <div className="info-item">
+              <strong>Payment Methods</strong>
+              <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
+            </div>
+            <div className="info-item">
+              <strong>Timing</strong>
+              <p>We typically ask that your balance be paid off 1 month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
+            </div>
+            <div className="info-item">
+              <strong>Need more flexibility?</strong>
+              <p>Monthly payments are just our default — we can adjust the schedule or payoff date to fit your situation. <button className="contact-link" onClick={() => setShowContactModal(true)}>Contact us</button></p>
+            </div>
+            <div className="info-item">
+              <strong>Want to pay in full instead?</strong>
+              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to full payment</button></p>
+            </div>
+          </footer>
 
-      {/* Submit Button */}
-      <button 
-        className="submit-btn"
-        onClick={handleSubmit}
-        disabled={isSubmitting || hasWarning}
-      >
-        {isSubmitting ? 'Saving...' : 'Save'}
-      </button>
+          {/* Submit Button */}
+          <button
+            className="submit-btn"
+            onClick={handleSubmit}
+            disabled={isSubmitting || hasWarning}
+          >
+            {isSubmitting ? 'Saving...' : 'Save'}
+          </button>
 
-      {/* Success Message */}
-      {submitSuccess && (
-        <div className="success-message">
-          Payment plan submitted successfully!
-        </div>
-      )}
+          {/* Success Message */}
+          {submitSuccess && (
+            <div className="success-message">
+              Payment plan submitted successfully!
+            </div>
+          )}
 
-      {/* Error Message */}
-      {submitError && (
-        <div className="error-message">
-          {submitError}
-        </div>
+          {/* Error Message */}
+          {submitError && (
+            <div className="error-message">
+              {submitError}
+            </div>
+          )}
+        </>
       )}
 
       {/* Contact Modal */}

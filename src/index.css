@@ -87,6 +87,55 @@ body {
   border: 1px solid rgba(0,0,0,0.08);
 }
 
+/* Payment Option Section */
+.payment-option-section {
+  padding: 20px 16px;
+}
+
+.payment-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-option-btn {
+  width: 100%;
+  min-height: 72px;
+  padding: 16px;
+  background: white;
+  border: 2px solid var(--cream-dark);
+  border-radius: 16px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payment-option-btn:hover {
+  border-color: var(--terracotta);
+  background: var(--cream);
+}
+
+.payment-option-btn:active {
+  transform: scale(0.98);
+}
+
+.option-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.option-description {
+  font-size: 13px;
+  color: var(--warm-gray);
+}
+
 /* Price Section */
 .price-section {
   text-align: center;
@@ -681,6 +730,9 @@ body {
 
 /* Name Input Modal */
 .name-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 24px;
 }
 
