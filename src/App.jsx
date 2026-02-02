@@ -327,6 +327,7 @@ function App() {
             onClick={submitWithName}
             disabled={isSubmitting || !patientName.trim() || !patientEmail.trim()}
           >
+            {isSubmitting && <div className="spinner"></div>}
             {isSubmitting ? 'Saving...' : 'Submit'}
           </button>
         </>
@@ -491,6 +492,7 @@ function App() {
             onClick={handleSubmit}
             disabled={isSubmitting || hasWarning}
           >
+            {isSubmitting && <div className="spinner"></div>}
             {isSubmitting ? 'Saving...' : 'Save'}
           </button>
 
@@ -603,6 +605,7 @@ function App() {
                 onClick={submitWithName}
                 disabled={!patientName.trim() || !patientEmail.trim() || isSubmitting}
               >
+                {isSubmitting && <div className="spinner"></div>}
                 {isSubmitting ? 'Saving...' : 'Submit'}
               </button>
             </div>
