@@ -143,13 +143,21 @@ function App() {
       customDeposit: paymentOption === 'plan' && customDeposit !== null ? customDeposit : null
     };
 
+    // Guard: never send empty body (e.g. prevents accidental empty POST)
+    const bodyString = JSON.stringify(payload);
+    if (!bodyString || bodyString === '{}') {
+      setSubmitError('Invalid form data. Please try again.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: bodyString,
       });
 
       if (!response.ok) {
