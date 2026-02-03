@@ -108,12 +108,12 @@ function App() {
     const trimmedEmail = patientEmail.trim();
 
     if (!trimmedName) {
-      setSubmitError('Please enter your name');
+      setSubmitError('Please enter patient name');
       return;
     }
 
     if (!trimmedEmail) {
-      setSubmitError('Please enter your email');
+      setSubmitError('Please enter patient email');
       return;
     }
 
@@ -291,19 +291,19 @@ function App() {
 
           {/* Name & Email Form */}
           <section className="section">
-            <div className="label" style={{ marginBottom: '12px' }}>Your Details</div>
+            <div className="label" style={{ marginBottom: '12px' }}>Patient Details</div>
             <div className="name-input-wrapper">
               <input
                 type="text"
                 className="name-input"
-                placeholder="Your name"
+                placeholder="Patient name"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
               />
               <input
                 type="email"
                 className="name-input"
-                placeholder="Your email"
+                placeholder="Patient email"
                 value={patientEmail}
                 onChange={(e) => setPatientEmail(e.target.value)}
                 onKeyDown={(e) => {
@@ -566,12 +566,12 @@ function App() {
             >
               ×
             </button>
-            <h2>Enter Your Details</h2>
+            <h2>Enter Patient Details</h2>
             <div className="name-input-wrapper">
               <input
                 type="text"
                 className="name-input"
-                placeholder="Your name"
+                placeholder="Patient name"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
                 disabled={isSubmitting}
@@ -580,7 +580,7 @@ function App() {
               <input
                 type="email"
                 className="name-input"
-                placeholder="Your email"
+                placeholder="Patient email"
                 value={patientEmail}
                 onChange={(e) => setPatientEmail(e.target.value)}
                 onKeyDown={(e) => {
