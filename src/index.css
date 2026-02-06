@@ -916,29 +916,7 @@ body {
   font-size: 15px;
   color: var(--charcoal);
   line-height: 1.5;
-  margin: 0 0 12px 0;
-}
-
-.ach-modal-reason {
-  font-size: 13px;
-  color: var(--warm-gray);
-  line-height: 1.5;
-  margin: 0 0 12px 0;
-  padding: 12px 16px;
-  background: var(--warning-bg);
-  border-radius: 12px;
-  border: 1px solid rgba(139, 105, 20, 0.15);
-}
-
-.ach-modal-instruction {
-  font-size: 14px;
-  color: var(--charcoal);
-  line-height: 1.5;
   margin: 0 0 20px 0;
-  padding: 12px 16px;
-  background: var(--cream);
-  border-radius: 12px;
-  border: 1px solid var(--cream-dark);
 }
 
 .ach-modal-confirm-btn {
@@ -961,7 +939,6 @@ body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-bottom: 10px;
 }
 
 .ach-modal-confirm-btn:hover:not(:disabled) {
@@ -973,29 +950,6 @@ body {
 }
 
 .ach-modal-confirm-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.ach-modal-back-btn {
-  width: 100%;
-  min-height: 44px;
-  padding: 12px;
-  background: none;
-  color: var(--warm-gray);
-  border: none;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.ach-modal-back-btn:hover:not(:disabled) {
-  color: var(--charcoal);
-}
-
-.ach-modal-back-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
