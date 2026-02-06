@@ -650,12 +650,6 @@ function App() {
             <p className="ach-modal-message">
               We never charge processing fees, and we'd love to keep it that way for everyone. When you receive your invoice, we humbly ask that you <strong>pay with your bank account (ACH)</strong> rather than a credit or debit card if possible.
             </p>
-            <p className="ach-modal-reason">
-              Choosing bank account at checkout is the single biggest thing you can do to help us continue offering this service without any additional fees.
-            </p>
-            <p className="ach-modal-instruction">
-              When you receive your invoice, just look for the <strong>"Bank Account / ACH"</strong> option at checkout.
-            </p>
             {submitError && (
               <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
                 {submitError}
@@ -668,20 +662,6 @@ function App() {
             >
               {isSubmitting && <div className="spinner"></div>}
               {isSubmitting ? 'Submitting...' : 'Got It — Submit My Plan'}
-            </button>
-            <button
-              className="ach-modal-back-btn"
-              onClick={() => {
-                if (!isSubmitting) {
-                  setShowAchModal(false);
-                  if (paymentOption === 'plan') {
-                    setShowNameModal(true);
-                  }
-                }
-              }}
-              disabled={isSubmitting}
-            >
-              Go Back
             </button>
           </div>
         </div>
