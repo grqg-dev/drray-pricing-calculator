@@ -36,6 +36,7 @@ function App() {
   const [submitError, setSubmitError] = useState(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
+  const [showAchModal, setShowAchModal] = useState(false);
   const [patientName, setPatientName] = useState('');
   const [patientEmail, setPatientEmail] = useState('');
   const [paymentOption, setPaymentOption] = useState(null); // 'full' or 'plan'
@@ -102,8 +103,8 @@ function App() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  // Submit with name and email to webhook
-  const submitWithName = async () => {
+  // Validate name/email and show ACH nag modal
+  const submitWithName = () => {
     const trimmedName = patientName.trim();
     const trimmedEmail = patientEmail.trim();
 
@@ -121,6 +122,16 @@ function App() {
       setSubmitError('Please enter a valid email address');
       return;
     }
+
+    setSubmitError(null);
+    setShowNameModal(false);
+    setShowAchModal(true);
+  };
+
+  // Actually submit to webhook after ACH acknowledgment
+  const confirmAndSubmit = async () => {
+    const trimmedName = patientName.trim();
+    const trimmedEmail = patientEmail.trim();
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -164,7 +175,7 @@ function App() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      setShowNameModal(false);
+      setShowAchModal(false);
       setSubmitSuccess(true);
     } catch (error) {
       console.error('Submission error:', error);
@@ -209,6 +220,12 @@ function App() {
                 </div>
               </>
             )}
+          </div>
+
+          <div className="done-ach-reminder">
+            <div className="done-ach-icon">🏦</div>
+            <strong>Remember: Please pay by bank account (ACH)</strong>
+            <p>When you receive your invoice, select <strong>"Bank Account / ACH"</strong> as your payment method. This keeps costs down and allows us to offer zero processing fees.</p>
           </div>
         </div>
       </div>
@@ -324,7 +341,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
+              <p><strong>ACH bank transfer is required.</strong> Paying by bank account keeps costs down and allows us to offer zero processing fees. Credit/debit cards incur 3–4% fees.</p>
             </div>
             <div className="info-item">
               <strong>Need a payment plan instead?</strong>
@@ -481,7 +498,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>Pay by ACH, debit, or credit card—no processing fees. (ACH preferred; it's how we keep it fee-free for everyone.)</p>
+              <p><strong>ACH bank transfer is required.</strong> Paying by bank account keeps costs down and allows us to offer zero processing fees. Credit/debit cards incur 3–4% fees.</p>
             </div>
             <div className="info-item">
               <strong>Timing</strong>
@@ -620,6 +637,52 @@ function App() {
                 {isSubmitting ? 'Saving...' : 'Submit'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACH Payment Preference Modal */}
+      {showAchModal && (
+        <div className="modal-overlay">
+          <div className="modal-content ach-modal">
+            <div className="ach-modal-icon">🏦</div>
+            <h2>Please Pay by Bank Account (ACH)</h2>
+            <p className="ach-modal-message">
+              We <strong>strongly prefer</strong> that all payments be made via <strong>ACH bank transfer</strong> rather than credit or debit card.
+            </p>
+            <p className="ach-modal-reason">
+              Paying by bank account keeps costs down for everyone and helps us continue offering payment plans with zero processing fees. Credit card payments cost us 3–4% in fees on every transaction.
+            </p>
+            <p className="ach-modal-instruction">
+              When you receive your invoice, please select <strong>"Bank Account / ACH"</strong> as your payment method.
+            </p>
+            {submitError && (
+              <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
+                {submitError}
+              </div>
+            )}
+            <button
+              className="ach-modal-confirm-btn"
+              onClick={confirmAndSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting && <div className="spinner"></div>}
+              {isSubmitting ? 'Submitting...' : 'Got It — Submit My Plan'}
+            </button>
+            <button
+              className="ach-modal-back-btn"
+              onClick={() => {
+                if (!isSubmitting) {
+                  setShowAchModal(false);
+                  if (paymentOption === 'plan') {
+                    setShowNameModal(true);
+                  }
+                }
+              }}
+              disabled={isSubmitting}
+            >
+              Go Back
+            </button>
           </div>
         </div>
       )}
