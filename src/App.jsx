@@ -224,8 +224,8 @@ function App() {
 
           <div className="done-ach-reminder">
             <div className="done-ach-icon">🏦</div>
-            <strong>Remember: Please pay by bank account (ACH)</strong>
-            <p>When you receive your invoice, select <strong>"Bank Account / ACH"</strong> as your payment method. This keeps costs down and allows us to offer zero processing fees.</p>
+            <strong>Friendly reminder: please pay by bank account</strong>
+            <p>When you receive your invoice, look for the <strong>"Bank Account / ACH"</strong> option. Paying this way helps us keep the service fee-free for everyone.</p>
           </div>
         </div>
       </div>
@@ -341,7 +341,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p><strong>ACH bank transfer is required.</strong> Paying by bank account keeps costs down and allows us to offer zero processing fees. Credit/debit cards incur 3–4% fees.</p>
+              <p>We never pass along processing fees, and we'd love to keep it that way. If you're able to, <strong>please pay by bank account (ACH)</strong> instead of credit or debit card—it helps us offer this to everyone at no extra cost.</p>
             </div>
             <div className="info-item">
               <strong>Need a payment plan instead?</strong>
@@ -498,7 +498,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p><strong>ACH bank transfer is required.</strong> Paying by bank account keeps costs down and allows us to offer zero processing fees. Credit/debit cards incur 3–4% fees.</p>
+              <p>We never pass along processing fees, and we'd love to keep it that way. If you're able to, <strong>please pay by bank account (ACH)</strong> instead of credit or debit card—it helps us offer this to everyone at no extra cost.</p>
             </div>
             <div className="info-item">
               <strong>Timing</strong>
@@ -646,15 +646,15 @@ function App() {
         <div className="modal-overlay">
           <div className="modal-content ach-modal">
             <div className="ach-modal-icon">🏦</div>
-            <h2>Please Pay by Bank Account (ACH)</h2>
+            <h2>One Quick Thing</h2>
             <p className="ach-modal-message">
-              We <strong>strongly prefer</strong> that all payments be made via <strong>ACH bank transfer</strong> rather than credit or debit card.
+              We never charge processing fees, and we'd love to keep it that way for everyone. When you receive your invoice, we humbly ask that you <strong>pay with your bank account (ACH)</strong> rather than a credit or debit card if possible.
             </p>
             <p className="ach-modal-reason">
-              Paying by bank account keeps costs down for everyone and helps us continue offering payment plans with zero processing fees. Credit card payments cost us 3–4% in fees on every transaction.
+              Choosing bank account at checkout is the single biggest thing you can do to help us continue offering this service without any additional fees.
             </p>
             <p className="ach-modal-instruction">
-              When you receive your invoice, please select <strong>"Bank Account / ACH"</strong> as your payment method.
+              When you receive your invoice, just look for the <strong>"Bank Account / ACH"</strong> option at checkout.
             </p>
             {submitError && (
               <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
