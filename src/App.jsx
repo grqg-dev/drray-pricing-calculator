@@ -380,7 +380,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>We never pass along processing fees, and we'd love to keep it that way. If you're able to, <strong>please pay by bank account (ACH)</strong> instead of credit or debit card—it helps us offer this to everyone at no extra cost.</p>
+              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
             </div>
             <div className="info-item">
               <strong>Need a payment plan instead?</strong>
@@ -537,7 +537,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>We never pass along processing fees, and we'd love to keep it that way. If you're able to, <strong>please pay by bank account (ACH)</strong> instead of credit or debit card—it helps us offer this to everyone at no extra cost.</p>
+              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
             </div>
             <div className="info-item">
               <strong>Timing</strong>
@@ -687,7 +687,7 @@ function App() {
             <div className="ach-modal-icon">🏦</div>
             <h2>One Quick Thing</h2>
             <p className="ach-modal-message">
-              We never charge processing fees, and we'd love to keep it that way for everyone. When you receive your invoice, we humbly ask that you <strong>pay with your bank account (ACH)</strong> rather than a credit or debit card if possible.
+              We don't charge processing fees, and we'd love to keep it that way. When you receive your invoice, <strong>please pay by bank account (ACH)</strong> rather than credit or debit card if you can.
             </p>
             {submitError && (
               <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
