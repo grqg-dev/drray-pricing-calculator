@@ -8,7 +8,7 @@ function App() {
   const SLIDING_SCALE_STEP = 250;
   const DEFAULT_MIN = 4000;
   const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
-  const WEBHOOK_URL = 'https://hook.us2.make.com/5xso5d5tyu3ubbz45isvoohto6jx1mfo';
+  const SUBMISSION_API_URL = import.meta.env.VITE_SUBMISSION_API_URL || 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
 
   // Get URL params
   const params = new URLSearchParams(window.location.search);
@@ -39,7 +39,7 @@ function App() {
   const [showAchModal, setShowAchModal] = useState(false);
   const [patientName, setPatientName] = useState('');
   const [patientEmail, setPatientEmail] = useState('');
-  const [paymentOption, setPaymentOption] = useState(null); // 'full' or 'plan'
+  const [paymentOption, setPaymentOption] = useState(isSlidingScale ? 'plan' : null); // 'full' or 'plan'
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -163,7 +163,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(WEBHOOK_URL, {
+      const response = await fetch(SUBMISSION_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
