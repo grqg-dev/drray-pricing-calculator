@@ -40,7 +40,6 @@ function App() {
   const [patientName, setPatientName] = useState('');
   const [patientEmail, setPatientEmail] = useState('');
   const [paymentOption, setPaymentOption] = useState(isSlidingScale ? 'plan' : null); // 'full' or 'plan'
-  const [paymentAction, setPaymentAction] = useState(null); // null, 'pay_now', or 'send_invoice'
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -186,20 +185,6 @@ function App() {
     }
   };
 
-  // Handle "Pay Now" action — will kick off Stripe checkout (TBD)
-  const handlePayNow = () => {
-    setPaymentAction('pay_now');
-    // TODO: Call Stripe checkout service to generate checkout link
-    // and redirect the user to the Stripe-hosted payment page
-  };
-
-  // Handle "Send Invoice" action — will trigger invoice generation (TBD)
-  const handleSendInvoice = () => {
-    setPaymentAction('send_invoice');
-    // TODO: Call Stripe invoice API to generate and email the invoice
-    // to the patient's email address
-  };
-
   // If submission was successful, show Done view
   if (submitSuccess) {
     return (
@@ -209,9 +194,7 @@ function App() {
             <div className="checkmark">✓</div>
             <h1>You're all set!</h1>
             <p className="done-subtitle">
-              {paymentOption === 'full'
-                ? "We've saved your information. We'll be in touch to confirm payment."
-                : "We've saved your payment plan. We'll be in touch to confirm."}
+              We've sent your invoice to <strong>{patientEmail}</strong>.
             </p>
             <p className="done-note">Made a mistake? Just let us know and we'll update it.</p>
           </div>
@@ -225,7 +208,7 @@ function App() {
             {paymentOption === 'plan' && (
               <>
                 <div className="done-card">
-                  <span className="done-label">Deposit Today</span>
+                  <span className="done-label">Deposit Due</span>
                   <span className="done-value">{formatCurrency(deposit)}</span>
                 </div>
 
@@ -237,46 +220,16 @@ function App() {
             )}
           </div>
 
-          {/* Payment Action CTAs */}
-          {paymentAction === null && (
-            <div className="done-actions">
-              <p className="done-actions-prompt">Ready to take the next step?</p>
-              <button
-                className="done-action-btn done-action-primary"
-                onClick={handlePayNow}
-              >
-                {paymentOption === 'full' ? 'Pay Now' : 'Pay My Deposit Now'}
-              </button>
-              <button
-                className="done-action-btn done-action-secondary"
-                onClick={handleSendInvoice}
-              >
-                Send Me the Invoice
-              </button>
-              <p className="done-actions-note">No rush — if you skip this, we'll send the invoice to you directly.</p>
-            </div>
-          )}
-
-          {paymentAction === 'pay_now' && (
-            <div className="done-action-confirmation">
-              <div className="done-action-conf-icon">💳</div>
-              <strong>Payment link is on the way!</strong>
-              <p>We're generating your secure payment link and will send it to <strong>{patientEmail}</strong> shortly. You can also expect a text with the link.</p>
-            </div>
-          )}
-
-          {paymentAction === 'send_invoice' && (
-            <div className="done-action-confirmation">
-              <div className="done-action-conf-icon">📧</div>
-              <strong>Invoice is on the way!</strong>
-              <p>We'll send your invoice to <strong>{patientEmail}</strong>. Pay whenever you're ready — no rush.</p>
-            </div>
-          )}
+          <div className="done-invoice-notice">
+            <div className="done-invoice-icon">📧</div>
+            <strong>Check your email</strong>
+            <p>Your invoice has been sent to <strong>{patientEmail}</strong>. You can pay at your convenience — just follow the link in the email.</p>
+          </div>
 
           <div className="done-ach-reminder">
             <div className="done-ach-icon">🏦</div>
             <strong>Friendly reminder: please pay by bank account</strong>
-            <p>When you receive your invoice, look for the <strong>"Bank Account / ACH"</strong> option. Paying this way helps us keep the service fee-free for everyone.</p>
+            <p>When you open your invoice, look for the <strong>"Bank Account / ACH"</strong> option. Paying this way helps us keep the service fee-free for everyone.</p>
           </div>
         </div>
       </div>
