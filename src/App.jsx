@@ -40,6 +40,7 @@ function App() {
   const [patientName, setPatientName] = useState('');
   const [patientEmail, setPatientEmail] = useState('');
   const [paymentOption, setPaymentOption] = useState(isSlidingScale ? 'plan' : null); // 'full' or 'plan'
+  const [invoiceUrl, setInvoiceUrl] = useState(null); // Stripe hosted_invoice_url
 
   // Calculate payoff date
   const getPayoffDate = () => {
@@ -175,6 +176,16 @@ function App() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // If the backend returns a Stripe hosted_invoice_url, grab it
+      try {
+        const data = await response.json();
+        if (data?.invoiceUrl) {
+          setInvoiceUrl(data.invoiceUrl);
+        }
+      } catch {
+        // Response may not be JSON — that's fine
+      }
+
       setShowAchModal(false);
       setSubmitSuccess(true);
     } catch (error) {
@@ -220,11 +231,35 @@ function App() {
             )}
           </div>
 
+          {invoiceUrl && (
+            <a
+              href={invoiceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="done-pay-now-btn"
+            >
+              {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
+            </a>
+          )}
+
           <div className="done-invoice-notice">
             <div className="done-invoice-icon">📧</div>
             <strong>Check your email</strong>
-            <p>Your invoice has been sent to <strong>{patientEmail}</strong>. You can pay at your convenience — just follow the link in the email.</p>
+            <p>
+              Your {paymentOption === 'plan' ? 'first invoice' : 'invoice'} has been sent to <strong>{patientEmail}</strong>.
+              {invoiceUrl
+                ? ' You can also use the button above to pay right now.'
+                : ' You can pay at your convenience — just follow the link in the email.'}
+            </p>
           </div>
+
+          {paymentOption === 'plan' && (
+            <div className="done-plan-notice">
+              <div className="done-plan-icon">📅</div>
+              <strong>Your payment plan is set up</strong>
+              <p>We'll send you an invoice each month for your remaining {months} payments of <strong>{formatCurrency(monthlyPayment)}</strong>. They'll arrive automatically — no action needed until then.</p>
+            </div>
+          )}
 
           <div className="done-ach-reminder">
             <div className="done-ach-icon">🏦</div>

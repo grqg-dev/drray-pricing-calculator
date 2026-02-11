@@ -984,6 +984,38 @@ body {
   opacity: 0.85;
 }
 
+/* Done Page Pay Now Button */
+.done-pay-now-btn {
+  display: block;
+  width: 100%;
+  margin-top: 24px;
+  min-height: 52px;
+  padding: 16px;
+  border: none;
+  border-radius: 16px;
+  background: var(--terracotta);
+  color: white;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  box-sizing: border-box;
+}
+
+.done-pay-now-btn:hover {
+  background: var(--terracotta-deep);
+}
+
+.done-pay-now-btn:active {
+  transform: scale(0.98);
+}
+
 /* Done Page Invoice Notice */
 .done-invoice-notice {
   margin-top: 24px;
@@ -1007,6 +1039,35 @@ body {
 }
 
 .done-invoice-notice p {
+  font-size: 13px;
+  color: var(--warm-gray);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Done Page Payment Plan Notice */
+.done-plan-notice {
+  margin-top: 16px;
+  padding: 20px;
+  background: var(--cream);
+  border-radius: 16px;
+  border: 1px solid var(--cream-dark);
+  text-align: center;
+}
+
+.done-plan-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.done-plan-notice strong {
+  display: block;
+  font-size: 14px;
+  color: var(--charcoal);
+  margin-bottom: 8px;
+}
+
+.done-plan-notice p {
   font-size: 13px;
   color: var(--warm-gray);
   line-height: 1.5;
