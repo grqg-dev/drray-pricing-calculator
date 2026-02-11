@@ -205,7 +205,7 @@ function App() {
             <div className="checkmark">✓</div>
             <h1>You're All Set!</h1>
             <p className="done-subtitle">
-              Your invoice has been sent to <strong>{patientEmail}</strong>. You can pay at your convenience using the link in the email.
+              We've sent an invoice to <strong>{patientEmail}</strong>.
             </p>
           </div>
 
