@@ -4,10 +4,10 @@
  * Flow:
  *   1. Create (or find) a Stripe customer by email
  *   2. Create a one-time deposit invoice, finalize it, and send to customer
- *   3. Create a recurring subscription for monthly payments using
- *      collection_method: "send_invoice" — Stripe emails the invoice
- *      to the customer each billing cycle instead of auto-charging.
- *      First subscription invoice is generated 30 days from now.
+ *   3. Create a subscription schedule for monthly payments using
+ *      collection_method: "send_invoice" at the phase level — Stripe
+ *      emails the invoice to the customer each billing cycle instead
+ *      of auto-charging. Schedule auto-cancels via end_behavior: "cancel".
  *
  * Usage:
  *   STRIPE_SECRET_KEY=sk_test_xxx node create-subscription-invoice.js
@@ -102,12 +102,14 @@ async function createDepositInvoice({ customerId, depositAmount, description }) 
 }
 
 // ---------------------------------------------------------------------------
-// Step 3: Create the monthly subscription (first invoice 30 days out)
+// Step 3: Create subscription schedule (matches Stripe UI structure)
 // ---------------------------------------------------------------------------
 
 async function createMonthlySubscription({ customerId, monthlyAmountCents, months, description }) {
   const now = Math.floor(Date.now() / 1000);
-  const thirtyDaysFromNow = now + (30 * 24 * 60 * 60);
+
+  // Calculate end date: months worth of billing cycles from now
+  const endDate = now + (months * 30 * 24 * 60 * 60);
 
   // If you have a fixed Price ID in Stripe, use it directly.
   // Otherwise, create an ad-hoc price for this customer's monthly amount.
@@ -131,37 +133,55 @@ async function createMonthlySubscription({ customerId, monthlyAmountCents, month
     console.log(`Created ad-hoc price: ${priceId} ($${(monthlyAmountCents / 100).toFixed(2)}/mo)`);
   }
 
-  const subscription = await stripe.subscriptions.create({
+  // Create a subscription schedule — this wraps the subscription with
+  // phase-level config and auto-cancels when the schedule completes.
+  // Matches the structure Stripe UI generates.
+  const schedule = await stripe.subscriptionSchedules.create({
     customer: customerId,
-    items: [{ price: priceId }],
 
-    // Send invoice via email instead of auto-charging
-    collection_method: 'send_invoice',
-    days_until_due: DAYS_UNTIL_DUE,
+    // Automatically cancel the subscription when the schedule ends
+    end_behavior: 'cancel',
 
-    // Anchor billing 30 days from now so the first invoice isn't generated until then
-    billing_cycle_anchor: thirtyDaysFromNow,
+    phases: [
+      {
+        items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
 
-    // Don't prorate the gap between now and the anchor — the deposit covers this period
-    proration_behavior: 'none',
+        // Send invoice via email instead of auto-charging
+        collection_method: 'send_invoice',
+        invoice_settings: {
+          days_until_due: DAYS_UNTIL_DUE,
+        },
 
-    // Cancel after N billing cycles (the number of monthly payments)
-    // This uses cancel_at to auto-end the subscription after the plan duration
-    cancel_at: thirtyDaysFromNow + (months * 30 * 24 * 60 * 60),
+        currency: 'usd',
 
-    metadata: {
-      monthly_amount: (monthlyAmountCents / 100).toFixed(2),
-      total_months: String(months),
-      source: 'drray-pricing-calculator',
-    },
+        // Don't prorate — the deposit covers the initial period
+        proration_behavior: 'none',
+
+        // Phase runs for the full plan duration
+        end_date: endDate,
+
+        metadata: {
+          monthly_amount: (monthlyAmountCents / 100).toFixed(2),
+          total_months: String(months),
+          source: 'drray-pricing-calculator',
+        },
+      },
+    ],
   });
 
-  console.log(`Created subscription: ${subscription.id}`);
-  console.log(`  Status: ${subscription.status}`);
-  console.log(`  First invoice: ${new Date(thirtyDaysFromNow * 1000).toLocaleDateString()}`);
-  console.log(`  Cancels after ${months} payments`);
+  console.log(`Created subscription schedule: ${schedule.id}`);
+  console.log(`  Subscription: ${schedule.subscription}`);
+  console.log(`  Status: ${schedule.status}`);
+  console.log(`  Phase ends: ${new Date(endDate * 1000).toLocaleDateString()}`);
+  console.log(`  End behavior: ${schedule.end_behavior}`);
+  console.log(`  Days until due: ${DAYS_UNTIL_DUE}`);
 
-  return subscription;
+  return schedule;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,15 +241,16 @@ export async function processPaymentPlan(payload) {
     const monthlyAmountCents = Math.round(monthlyPayment * 100);
     const monthlyDescription = `Monthly payment — Concierge OBGYN care ($${monthlyPayment}/mo)`;
 
-    const subscription = await createMonthlySubscription({
+    const schedule = await createMonthlySubscription({
       customerId: customer.id,
       monthlyAmountCents,
       months,
       description: monthlyDescription,
     });
 
-    result.subscriptionId = subscription.id;
-    result.subscriptionStatus = subscription.status;
+    result.subscriptionScheduleId = schedule.id;
+    result.subscriptionId = schedule.subscription;
+    result.subscriptionStatus = schedule.status;
   }
 
   console.log('--- Stripe automation complete ---');
