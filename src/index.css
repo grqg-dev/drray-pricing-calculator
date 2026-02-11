@@ -955,40 +955,11 @@ body {
 }
 
 /* Done Page ACH Reminder */
-.done-ach-reminder {
-  margin-top: 24px;
-  padding: 20px;
-  background: var(--warning-bg);
-  border-radius: 16px;
-  border: 1px solid rgba(139, 105, 20, 0.15);
-  text-align: center;
-}
-
-.done-ach-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
-}
-
-.done-ach-reminder strong {
-  display: block;
-  font-size: 14px;
-  color: var(--warning-text);
-  margin-bottom: 8px;
-}
-
-.done-ach-reminder p {
-  font-size: 13px;
-  color: var(--warning-text);
-  line-height: 1.5;
-  margin: 0;
-  opacity: 0.85;
-}
-
 /* Done Page Pay Now Button */
 .done-pay-now-btn {
   display: block;
   width: 100%;
-  margin-top: 24px;
+  margin-bottom: 20px;
   min-height: 52px;
   padding: 16px;
   border: none;
@@ -1016,62 +987,57 @@ body {
   transform: scale(0.98);
 }
 
-/* Done Page Invoice Notice */
-.done-invoice-notice {
-  margin-top: 24px;
-  padding: 20px;
-  background: var(--cream);
+/* Done Page Info Section */
+.done-info-section {
+  margin-top: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
-  border: 1px solid var(--cream-dark);
-  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
 
-.done-invoice-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+.done-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
 }
 
-.done-invoice-notice strong {
+.done-info-item + .done-info-item {
+  border-top: 1px solid var(--cream-dark);
+}
+
+.done-info-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.done-info-item strong {
   display: block;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--charcoal);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
-.done-invoice-notice p {
+.done-info-item p {
   font-size: 13px;
   color: var(--warm-gray);
   line-height: 1.5;
   margin: 0;
 }
 
-/* Done Page Payment Plan Notice */
-.done-plan-notice {
-  margin-top: 16px;
-  padding: 20px;
-  background: var(--cream);
-  border-radius: 16px;
-  border: 1px solid var(--cream-dark);
-  text-align: center;
+.done-info-muted {
+  padding: 12px 20px;
 }
 
-.done-plan-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
-}
-
-.done-plan-notice strong {
-  display: block;
-  font-size: 14px;
-  color: var(--charcoal);
-  margin-bottom: 8px;
-}
-
-.done-plan-notice p {
-  font-size: 13px;
-  color: var(--warm-gray);
-  line-height: 1.5;
-  margin: 0;
+.done-info-muted p {
+  font-size: 12px;
+  font-style: italic;
 }
 
 /* Loading Spinner */

@@ -203,12 +203,22 @@ function App() {
         <div className="done-container">
           <div className="done-header">
             <div className="checkmark">✓</div>
-            <h1>You're all set!</h1>
+            <h1>You're All Set!</h1>
             <p className="done-subtitle">
-              We've sent your invoice to <strong>{patientEmail}</strong>.
+              Your invoice has been sent to <strong>{patientEmail}</strong>. You can pay at your convenience using the link in the email.
             </p>
-            <p className="done-note">Made a mistake? Just let us know and we'll update it.</p>
           </div>
+
+          {invoiceUrl && (
+            <a
+              href={invoiceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="done-pay-now-btn"
+            >
+              {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
+            </a>
+          )}
 
           <div className="done-summary">
             <div className="done-card">
@@ -231,40 +241,31 @@ function App() {
             )}
           </div>
 
-          {invoiceUrl && (
-            <a
-              href={invoiceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="done-pay-now-btn"
-            >
-              {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
-            </a>
-          )}
+          <div className="done-info-section">
+            {paymentOption === 'plan' && (
+              <div className="done-info-item">
+                <span className="done-info-icon">📅</span>
+                <div>
+                  <strong>Payment Plan</strong>
+                  <p>We'll send you an invoice each month for your remaining {months} payments of {formatCurrency(monthlyPayment)}. They'll arrive automatically.</p>
+                </div>
+              </div>
+            )}
 
-          <div className="done-invoice-notice">
-            <div className="done-invoice-icon">📧</div>
-            <strong>Check your email</strong>
-            <p>
-              Your {paymentOption === 'plan' ? 'first invoice' : 'invoice'} has been sent to <strong>{patientEmail}</strong>.
-              {invoiceUrl
-                ? ' You can also use the button above to pay right now.'
-                : ' You can pay at your convenience — just follow the link in the email.'}
-            </p>
-          </div>
-
-          {paymentOption === 'plan' && (
-            <div className="done-plan-notice">
-              <div className="done-plan-icon">📅</div>
-              <strong>Your payment plan is set up</strong>
-              <p>We'll send you an invoice each month for your remaining {months} payments of <strong>{formatCurrency(monthlyPayment)}</strong>. They'll arrive automatically — no action needed until then.</p>
+            <div className="done-info-item">
+              <span className="done-info-icon">🏦</span>
+              <div>
+                <strong>Please Pay by Bank Account</strong>
+                <p>When you open your invoice, look for the "Bank Account / ACH" option. Paying this way helps us keep the service fee-free for everyone.</p>
+              </div>
             </div>
-          )}
 
-          <div className="done-ach-reminder">
-            <div className="done-ach-icon">🏦</div>
-            <strong>Friendly reminder: please pay by bank account</strong>
-            <p>When you open your invoice, look for the <strong>"Bank Account / ACH"</strong> option. Paying this way helps us keep the service fee-free for everyone.</p>
+            <div className="done-info-item done-info-muted">
+              <span className="done-info-icon">✉️</span>
+              <div>
+                <p>Made a mistake? Just let us know and we'll update it.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -687,7 +688,7 @@ function App() {
             <div className="ach-modal-icon">🏦</div>
             <h2>One Quick Thing</h2>
             <p className="ach-modal-message">
-              We don't charge processing fees, and we'd love to keep it that way. When you receive your invoice, <strong>please pay by bank account (ACH)</strong> rather than credit or debit card if you can.
+              We don't charge processing fees, and we'd love to keep it that way. When you receive your invoice, <strong>Please pay by bank account (ACH)</strong> rather than credit or debit card if you can.
             </p>
             {submitError && (
               <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
