@@ -984,6 +984,100 @@ body {
   opacity: 0.85;
 }
 
+/* Done Page Payment Actions */
+.done-actions {
+  margin-top: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.done-actions-prompt {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--charcoal);
+  margin: 0 0 4px 0;
+}
+
+.done-action-btn {
+  width: 100%;
+  min-height: 52px;
+  padding: 16px;
+  border: none;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.done-action-btn:active {
+  transform: scale(0.98);
+}
+
+.done-action-primary {
+  background: var(--terracotta);
+  color: white;
+}
+
+.done-action-primary:hover {
+  background: var(--terracotta-deep);
+}
+
+.done-action-secondary {
+  background: white;
+  color: var(--charcoal);
+  border: 2px solid var(--cream-dark);
+}
+
+.done-action-secondary:hover {
+  border-color: var(--terracotta);
+  background: var(--cream);
+}
+
+.done-actions-note {
+  font-size: 12px;
+  color: var(--warm-gray);
+  margin: 0;
+  font-style: italic;
+}
+
+/* Done Page Payment Action Confirmation */
+.done-action-confirmation {
+  margin-top: 24px;
+  padding: 20px;
+  background: #E8F5E9;
+  border-radius: 16px;
+  border: 1px solid rgba(46, 125, 50, 0.15);
+  text-align: center;
+}
+
+.done-action-conf-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.done-action-confirmation strong {
+  display: block;
+  font-size: 14px;
+  color: #2E7D32;
+  margin-bottom: 8px;
+}
+
+.done-action-confirmation p {
+  font-size: 13px;
+  color: #2E7D32;
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.85;
+}
+
 /* Loading Spinner */
 .spinner {
   width: 18px;
