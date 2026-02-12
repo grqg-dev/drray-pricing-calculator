@@ -291,7 +291,7 @@ function App() {
       {paymentOption === null && (
         <section className="section payment-option-section">
           <p className="payment-intro">
-            This calculator helps you choose your payment preference. Once you submit, your invoice will be sent to your email—no payment is collected here.
+            This calculator helps you choose your payment preference. Once you submit, you can pay right away or use the invoice we'll send to your email.
           </p>
           <div className="label" style={{ marginBottom: '16px' }}>How would you like to pay?</div>
           <div className="payment-options">
