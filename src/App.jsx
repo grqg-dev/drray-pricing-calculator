@@ -214,8 +214,10 @@ function App() {
       <div className="app done-view">
         <div className="done-container">
           <div className="done-header">
-            <div className="checkmark">✓</div>
-            <h1>You're All Set!</h1>
+            <div className="done-header-title">
+              <div className="checkmark">✓</div>
+              <h1>You're All Set!</h1>
+            </div>
             <p className="done-subtitle">
               {paymentOption === 'plan'
                 ? <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>

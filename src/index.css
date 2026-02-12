@@ -151,6 +151,7 @@ body {
 /* Price Section */
 .price-section {
   text-align: center;
+  padding: 10px 16px;
 }
 
 .price-header {
@@ -178,7 +179,7 @@ body {
   font-size: 34px;
   font-weight: 400;
   line-height: 1.1;
-  margin: 4px 0 8px;
+  margin: 2px 0 4px;
 }
 
 /* Slider */
@@ -375,12 +376,12 @@ body {
 .summary-card {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 72px;
+  min-height: 0;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
-  padding: 14px 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -569,10 +570,8 @@ body {
 
 /* Done View */
 .done-view {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 40px 20px 32px;
+  justify-content: flex-start;
+  align-items: center;
 }
 
 .done-container {
@@ -582,36 +581,44 @@ body {
 
 .done-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+}
+
+.done-header-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .checkmark {
-  width: 64px;
-  height: 64px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--terracotta);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 36px;
+  font-size: 22px;
   font-weight: 500;
-  margin: 0 auto 16px;
+  flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(184, 132, 122, 0.3);
 }
 
 .done-header h1 {
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 500;
   color: var(--charcoal);
-  margin-bottom: 8px;
+  margin: 0;
 }
 
 .done-subtitle {
   font-size: 14px;
   color: var(--warm-gray);
-  margin: 0 0 8px 0;
+  margin: 0;
 }
 
 .done-note {
@@ -657,21 +664,21 @@ body {
 
 /* Done Page Timeline */
 .done-timeline {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  padding: 20px 20px 20px 24px;
+  padding: 16px 20px 16px 20px;
 }
 
 .done-timeline-item {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  padding-bottom: 20px;
+  padding-bottom: 16px;
   position: relative;
 }
 
@@ -1028,9 +1035,9 @@ body {
 .done-pay-now-btn {
   display: block;
   width: 100%;
-  margin-bottom: 20px;
-  min-height: 52px;
-  padding: 16px;
+  margin-bottom: 16px;
+  min-height: 48px;
+  padding: 14px;
   border: none;
   border-radius: 16px;
   background: var(--terracotta);
@@ -1058,7 +1065,7 @@ body {
 
 /* Done Page Info Section */
 .done-info-section {
-  margin-top: 20px;
+  margin-top: 0;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
