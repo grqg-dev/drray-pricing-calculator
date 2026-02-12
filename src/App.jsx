@@ -317,7 +317,9 @@ function App() {
       {paymentOption === null && (
         <section className="section payment-option-section">
           <p className="payment-intro">
-            Take a look at the payment options below — nothing happens until you're ready to submit, and we'll confirm everything with you first. Once you do submit, we'll send an invoice to your email (and set up monthly invoices automatically if you choose a plan).
+            Explore your payment options — nothing happens until you're ready, and we'll confirm everything with you first.
+            <br /><br />
+            Once you submit, we'll send an invoice to your email (and set up monthly invoices automatically if you choose a plan).
           </p>
           <div className="label" style={{ marginBottom: '16px' }}>How would you like to pay?</div>
           <div className="payment-options">
