@@ -655,6 +655,75 @@ body {
   color: var(--charcoal);
 }
 
+/* Done Page Timeline */
+.done-timeline {
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  padding: 20px 20px 20px 24px;
+}
+
+.done-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 20px;
+  position: relative;
+}
+
+.done-timeline-item:not(.done-timeline-last)::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 14px;
+  bottom: 0;
+  width: 2px;
+  background: var(--cream-dark);
+}
+
+.done-timeline-last {
+  padding-bottom: 0;
+}
+
+.done-timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cream-dark);
+  flex-shrink: 0;
+  margin-top: 3px;
+  position: relative;
+  z-index: 1;
+}
+
+.done-timeline-now .done-timeline-dot {
+  background: var(--terracotta);
+  box-shadow: 0 0 0 3px rgba(184, 132, 122, 0.2);
+}
+
+.done-timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.done-timeline-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.done-timeline-detail {
+  font-size: 13px;
+  color: var(--warm-gray);
+  line-height: 1.4;
+}
+
 /* Contact Modal */
 .modal-overlay {
   position: fixed;

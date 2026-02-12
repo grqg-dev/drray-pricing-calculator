@@ -42,12 +42,21 @@ function App() {
   const [paymentOption, setPaymentOption] = useState(isSlidingScale ? 'plan' : null); // 'full' or 'plan'
   const [invoiceUrl, setInvoiceUrl] = useState(null); // Stripe hosted_invoice_url
 
-  // Calculate payoff date
+  // Calculate payoff date (deposit now + N months of payments starting 30 days out)
   const getPayoffDate = () => {
     const today = new Date();
     const payoff = new Date(today);
+    // First monthly invoice is 30 days out, then N-1 more after that
+    payoff.setDate(payoff.getDate() + 30);
     payoff.setMonth(payoff.getMonth() + months);
     return payoff;
+  };
+
+  // First monthly invoice date (30 days from now)
+  const getFirstInvoiceDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d;
   };
 
   const payoffDate = getPayoffDate();
@@ -198,6 +207,8 @@ function App() {
 
   // If submission was successful, show Done view
   if (submitSuccess) {
+    const firstInvoiceDate = getFirstInvoiceDate();
+
     return (
       <div className="app done-view">
         <div className="done-container">
@@ -205,7 +216,10 @@ function App() {
             <div className="checkmark">✓</div>
             <h1>You're All Set!</h1>
             <p className="done-subtitle">
-              We've sent an invoice to <strong>{patientEmail}</strong>.
+              {paymentOption === 'plan'
+                ? <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
+                : <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
+              }
             </p>
           </div>
 
@@ -220,38 +234,49 @@ function App() {
             </a>
           )}
 
-          <div className="done-summary">
-            <div className="done-card">
-              <span className="done-label">Total</span>
-              <span className="done-value">{formatCurrency(totalPrice)}</span>
-            </div>
-
-            {paymentOption === 'plan' && (
-              <>
-                <div className="done-card">
-                  <span className="done-label">Deposit Due</span>
-                  <span className="done-value">{formatCurrency(deposit)}</span>
-                </div>
-
-                <div className="done-card">
-                  <span className="done-label">{months}× Monthly</span>
-                  <span className="done-value">{formatCurrency(monthlyPayment)}</span>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="done-info-section">
-            {paymentOption === 'plan' && (
-              <div className="done-info-item">
-                <span className="done-info-icon">📅</span>
-                <div>
-                  <strong>Payment Plan</strong>
-                  <p>We'll send you an invoice each month for your remaining {months} payments of {formatCurrency(monthlyPayment)}. They'll arrive automatically.</p>
+          {paymentOption === 'plan' && (
+            <div className="done-timeline">
+              <div className="done-timeline-item done-timeline-now">
+                <div className="done-timeline-dot"></div>
+                <div className="done-timeline-content">
+                  <span className="done-timeline-label">Now</span>
+                  <span className="done-timeline-detail">Deposit invoice for {formatCurrency(deposit)}</span>
                 </div>
               </div>
-            )}
+              <div className="done-timeline-item">
+                <div className="done-timeline-dot"></div>
+                <div className="done-timeline-content">
+                  <span className="done-timeline-label">{formatDate(firstInvoiceDate)}</span>
+                  <span className="done-timeline-detail">First monthly invoice — {formatCurrency(monthlyPayment)}</span>
+                </div>
+              </div>
+              <div className="done-timeline-item">
+                <div className="done-timeline-dot"></div>
+                <div className="done-timeline-content">
+                  <span className="done-timeline-label">Then monthly</span>
+                  <span className="done-timeline-detail">{months - 1} more invoice{months - 1 !== 1 ? 's' : ''} of {formatCurrency(monthlyPayment)}, sent automatically</span>
+                </div>
+              </div>
+              <div className="done-timeline-item done-timeline-last">
+                <div className="done-timeline-dot"></div>
+                <div className="done-timeline-content">
+                  <span className="done-timeline-label">{formatDate(getPayoffDate())}</span>
+                  <span className="done-timeline-detail">All paid off</span>
+                </div>
+              </div>
+            </div>
+          )}
 
+          {paymentOption === 'full' && (
+            <div className="done-summary">
+              <div className="done-card">
+                <span className="done-label">Total</span>
+                <span className="done-value">{formatCurrency(totalPrice)}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="done-info-section">
             <div className="done-info-item">
               <span className="done-info-icon">🏦</span>
               <div>
@@ -291,7 +316,7 @@ function App() {
       {paymentOption === null && (
         <section className="section payment-option-section">
           <p className="payment-intro">
-            This calculator helps you choose your payment preference. Once you submit, you can pay right away or use the invoice we'll send to your email. If you choose a payment plan, we'll automatically set up your monthly invoices too.
+            Take a look at the payment options below — nothing happens until you're ready to submit, and we'll confirm everything with you first. Once you do submit, we'll send an invoice to your email (and set up monthly invoices automatically if you choose a plan).
           </p>
           <div className="label" style={{ marginBottom: '16px' }}>How would you like to pay?</div>
           <div className="payment-options">
@@ -541,8 +566,8 @@ function App() {
               <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
             </div>
             <div className="info-item">
-              <strong>Timing</strong>
-              <p>We typically ask that your balance be paid off 1 month before your due date{dueDate ? ` (by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))})` : ''}.</p>
+              <strong>How It Works</strong>
+              <p>After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that{dueDate ? `. We typically ask that your balance be paid off by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))}` : ''}.</p>
             </div>
             <div className="info-item">
               <strong>Need more flexibility?</strong>
