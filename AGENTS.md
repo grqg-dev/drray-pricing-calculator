@@ -14,12 +14,74 @@ The DrRay Pricing Calculator is a React-based web application that allows patien
 - **Deployment**: AWS Amplify
 
 ### Key Files
-- `src/App.jsx` - Main React component (192 lines)
-- `src/index.css` - All styling (318 lines)
+- `src/App.jsx` - All components and logic (~735 lines)
+- `src/index.css` - All styling (~1,134 lines)
 - `src/main.jsx` - Vite entry point
 - `vite.config.js` - Vite configuration
 - `tailwind.config.js` - Tailwind configuration
-- `amplify.yml` - AWS Amplify deployment config
+
+## Code Structure (src/App.jsx)
+
+The file is organized into four clearly labeled sections:
+
+### 1. Constants (top of file)
+Module-level configuration values:
+```javascript
+DEFAULT_FIXED_PRICE = 8500   // Default fixed price (overridable via maxPrice URL param)
+MIN_DEPOSIT = 250            // Minimum deposit amount
+MIN_MONTHLY_PAYMENT = 250    // Minimum monthly payment
+DEFAULT_SLIDING_SCALE_MAX = 8500
+SLIDING_SCALE_STEP = 250     // Price slider increments
+DEFAULT_MIN = 4000           // Default sliding scale minimum
+DEPOSIT_PRESETS = [0.10, 0.25, 0.50]
+SUBMISSION_API_URL            // AWS Lambda webhook endpoint
+```
+
+### 2. Utility Functions (module-level, pure functions)
+- `formatDate(date)` — locale-aware date formatting
+- `formatCurrency(amount)` — USD formatting with no cents
+- `isValidEmail(email)` — email regex validation
+- `parseDueDate(dueDate)` — parses YYYY-MM-DD string to Date (avoids timezone issues)
+- `getOneMonthBefore(date)` — returns date minus one month
+- `getPayoffDate(months)` — calculates end date (today + 30 days + N months)
+- `getFirstInvoiceDate()` — 30 days from now
+- `parseUrlParams()` — reads all URL parameters into a config object
+
+### 3. Sub-components
+- **`PriceSection`** — shared price display/slider used by both "Pay in Full" and "Payment Plan" views. Accepts props: `isSlidingScale`, `selectedPrice`, `setSelectedPrice`, `slidingScaleMin`, `slidingScaleMax`, `fixedPrice`
+- **`DoneView`** — success screen shown after submission. Displays timeline (for plans) or total (for full payment), pay button, and ACH reminder
+
+### 4. Main App Component
+Contains all state, derived values, handlers, and the main render logic.
+
+**State variables:**
+```
+selectedPrice, months, depositPercent, customDeposit,
+isSubmitting, submitSuccess, submitError,
+showContactModal, showNameModal, showAchModal,
+patientName, patientEmail, paymentOption, invoiceUrl
+```
+
+**Warning flags (named booleans):**
+```
+depositBelowMin, depositBelowPercent, depositExceedsTotal,
+pastDueDate, belowMinPayment, hasWarning
+```
+
+**Key handlers:**
+- `handlePresetClick(percent)` — deposit preset button
+- `handleSubmit()` — opens name modal (plan flow)
+- `closeNameModal()` — closes modal and resets fields
+- `handleEmailKeyDown(e)` — Enter key submits form
+- `submitWithName()` — validates name/email, opens ACH modal
+- `confirmAndSubmit()` — POSTs to webhook, handles response
+
+**Render flow:**
+1. If `submitSuccess` → render `<DoneView />`
+2. If `paymentOption === null` → render option selection
+3. If `paymentOption === 'full'` → render `<PriceSection />` + inline name/email form + submit
+4. If `paymentOption === 'plan'` → render `<PriceSection />` + timeline + deposit + summary + warnings + submit
+5. Modals render at bottom (Contact, Name Entry, ACH confirmation)
 
 ## URL Parameters (Query String)
 
@@ -38,7 +100,7 @@ The DrRay Pricing Calculator is a React-based web application that allows patien
 - **`dueDate`** (date string, optional)
   - Format: `YYYY-MM-DD` (ISO 8601)
   - Example: `2026-05-15`
-  - Effects: 
+  - Effects:
     - Displays due date in header
     - Triggers warning if payoff date exceeds due date
     - Updates timing section with required payment deadline (1 month before)
@@ -46,15 +108,19 @@ The DrRay Pricing Calculator is a React-based web application that allows patien
 - **`extended`** (boolean, optional)
   - Value: `true` to extend payment terms to 12 months
   - Default: 9-month maximum
-  - Effects: Adds 12-month quick button, extends slider range
+  - Effects: Extends slider range to 12 months
 
 - **`maxPrice`** (integer, optional)
   - Value: Maximum price in dollars to override the default $8,500
   - Default: $8,500
-  - Effects: 
+  - Effects:
     - Overrides both fixed price (when not in sliding scale mode)
     - Overrides sliding scale maximum (when in sliding scale mode)
   - Example: `maxPrice=10000` sets both fixed and sliding scale max to $10,000
+
+- **`preview`** (string, optional)
+  - Value: `done` to show success screen
+  - Effects: Renders the DoneView with sample data (for previewing)
 
 ### Example URLs
 ```
@@ -77,62 +143,38 @@ https://app.example.com/?maxPrice=10000
 https://app.example.com/?slidingScale=true&originalPrice=5000&maxPrice=12000
 ```
 
-## Component Structure
-
-### App Component State
-```javascript
-selectedPrice    // Current price (sliding scale) or fixed $8,500
-months          // Selected payment term (1-9 or 1-12 months)
-```
-
-### Key Calculations
-- **Deposit**: 10% of total price (minimum $250)
-- **Monthly Payment**: (Total - Deposit) / Months
-- **Payoff Date**: Today + selected months
-- **Warnings**:
-  - Triggered if payoff date > due date
-  - Triggered if monthly payment < $250
-
 ## UI Sections
 
 ### Header
-- Title: "Your Care, Your Terms"
-- Subtitle: "Choose a payment schedule that works for you"
+- Title: "Payment Calculator"
+- Subtitle: "Choose a payment plan that works for you"
 - Optional: Due date display (if dueDate param provided)
 
-### Price Section
-- Fixed mode: Shows "$8,500"
-- Sliding scale mode:
-  - Title: "Your Price"
-  - Strikethrough original price ($8,500)
-  - Current price (slider-controlled)
-  - Slider range: originalPrice to $8,500 (in $250 increments)
+### Price Section (PriceSection component)
+- Fixed mode: Shows total with formatted currency
+- Sliding scale mode: Interactive slider from originalPrice to max
 
-### Timeline Section
+### Timeline Section (plan only)
 - Slider for payment months (1-9 or 1-12)
-- Quick buttons: [3, 6, 9] or [3, 6, 9, 12]
 - Displays selected month count
 
-### Summary Cards
-- Today: Deposit amount (10% + min $250)
-- X× Monthly: Monthly payment amount
-- Total (highlighted): Total price, payoff date
+### Summary Cards (plan only)
+- Deposit Today: deposit amount
+- N× Monthly: monthly payment amount
 
-### Warnings
-- Yellow background (#FEF6E6)
-- Displays only when conditions are met
-- Two possible warnings:
-  1. "Payment extends past your due date"
-  2. "Minimum payment is $250/mo — try fewer months"
+### Warnings (plan only)
+- Yellow background, conditional display
+- Possible warnings: past due date, below min payment, deposit too low/high
 
 ### Info Section (Footer)
-- Payment Methods: ACH, debit, card (ACH preferred to control fees)
-- Timing: Explains 1-month pre-due deadline
-- Need flexibility: CTA for contacting support
+- Payment Methods: ACH preferred
+- How It Works: explains invoice schedule
+- Flexibility: contact link
+- Switch payment mode link
 
 ## Styling Details
 
-### Color Scheme
+### Color Scheme (CSS variables in :root)
 - **Cream**: #FBF8F4 (background)
 - **Blush**: #E8D5D0 (light accents)
 - **Terracotta**: #B8847A (primary, interactive)
@@ -141,126 +183,69 @@ months          // Selected payment term (1-9 or 1-12 months)
 - **Warm Gray**: #8C857D (muted text)
 
 ### Typography
-- **Headers**: Fraunces serif font (9-144px range)
+- **Headers**: Fraunces serif font
 - **Body**: Plus Jakarta Sans sans-serif
 - **Responsive**: Max-width 400px (mobile-first)
-
-### Layout
-- Mobile-first responsive design
-- Flex container with column layout
-- Scrollable content area
-- Fixed height prevents overflow on iPhone 14
 
 ## Development Guidelines
 
 ### When Making Changes
-1. Keep state minimal (only `selectedPrice` and `months`)
-2. All calculations should be derived from state
-3. URL parameters are read-only on page load
-4. Maintain responsive layout (<= 400px max-width)
-5. Preserve accessibility (semantic HTML, ARIA labels for sliders)
+1. Constants and utility functions are at module scope (top of file) — easy to find
+2. The `PriceSection` component is shared — edit it once, both views update
+3. All state lives in the App component, derived values are calculated from state
+4. URL parameters are read-only on page load via `parseUrlParams()`
+5. Warning flags are named booleans — add new ones and include in `hasWarning`
+6. Maintain responsive layout (<= 400px max-width)
 
-### Testing
-- Test all URL parameter combinations
-- Verify calculations at edge cases:
-  - Minimum price ($4,000 + $250 deposit)
-  - Maximum price ($8,500 + $850 deposit)
-  - Various month counts (1, 3, 6, 9, 12)
-  - With and without due dates
-- Check warning triggers work correctly
-- Verify date calculations (payoff + due date logic)
+### Adding a New URL Parameter
+1. Add to `parseUrlParams()` function
+2. Destructure in the App component
+3. Use in calculations or conditional rendering
+4. Document in this file and README.md
 
-### Performance Considerations
-- Component is lightweight (~200 lines)
-- No external API calls
-- All calculations are synchronous
-- CSS transitions enabled for sliders
+### Changing Pricing Structure
+Edit constants at the top of `src/App.jsx`:
+```javascript
+const DEFAULT_FIXED_PRICE = 8500;
+const MIN_DEPOSIT = 250;
+const DEFAULT_SLIDING_SCALE_MAX = 8500;
+```
+Or override dynamically via the `maxPrice` URL parameter.
 
-## Deployment
+### Adding New Warnings
+1. Add a named boolean flag in the "Warning flags" section of App
+2. Include it in the `hasWarning` expression
+3. Add a `<div className="warning">` in the warnings JSX block
 
-### Development Server
+### Modifying Styling
+Edit `src/index.css`:
+- Color variables in `:root` (lines 9-20)
+- Component styles organized by section below
+
+## Development Server
 ```bash
 npm run dev
 # Starts on http://localhost:5174
 ```
 
-### Production Build
+## Production Build
 ```bash
 npm run build
 # Creates optimized dist/ folder
 ```
 
-### AWS Amplify Deployment
-- Configured via `amplify.yml`
-- Auto-deploys on pushes to `main` branch
+## Deployment
+- AWS Amplify auto-deploys on pushes to `main` branch
 - App ID: `duwmmpm67brmh`
 - Domain: `duwmmpm67brmh.amplifyapp.com`
 
-### Environment Variables
-None currently configured. All values are hardcoded constants in App.jsx:
-- `FIXED_PRICE`: $8,500
-- `MIN_DEPOSIT`: $250
-- `MIN_MONTHLY_PAYMENT`: $250
-- `DEPOSIT_PERCENTAGE`: 10%
-- `DEFAULT_MIN`: $4,000
-- `SLIDING_SCALE_MAX`: $8,500
-- `SLIDING_SCALE_STEP`: $250 (increments)
-
-## Common Tasks
-
-### Adding a New URL Parameter
-1. Extract in App component: `const paramName = params.get('paramName')`
-2. Use in calculations or conditional rendering
-3. Document in agents.md and README.md
-4. Test with various values
-
-### Changing Pricing Structure
-Edit constants in App.jsx (lines 4-10):
+## Submission Payload
 ```javascript
-const DEFAULT_FIXED_PRICE = 8500;   // Default fixed price (can be overridden via maxPrice URL param)
-const MIN_DEPOSIT = 250;            // Change minimum deposit
-const DEPOSIT_PERCENTAGE = 0.10;    // Change deposit calculation
-const DEFAULT_SLIDING_SCALE_MAX = 8500; // Default max sliding price (can be overridden via maxPrice URL param)
+{
+  name, email, totalPrice, paymentOption,
+  deposit, monthlyPayment, months, payoffDate,
+  dueDate, isSlidingScale, originalPrice, isExtended,
+  timestamp, depositPercent, customDeposit
+}
 ```
-
-**Note:** You can also override prices dynamically via the `maxPrice` URL parameter without changing code.
-
-### Modifying Styling
-Edit `src/index.css`:
-- Color variables in `:root` (lines 9-20)
-- Component styles below (organized by section)
-- Mobile max-width: 400px (line 40)
-
-### Adding New Warnings
-In App.jsx `hasWarning` logic (line 58):
-1. Create condition that triggers warning
-2. Add `<div className="warning">` in warnings section
-3. Update warning CSS if needed
-
-## Troubleshooting
-
-### Slider Not Updating
-- Check that slider has `onChange` handler
-- Verify `--progress` CSS variable is properly calculated
-- Ensure state updates trigger re-render
-
-### Calculations Incorrect
-- Verify `DEPOSIT_PERCENTAGE` is 0.10 (not 10)
-- Check `MIN_DEPOSIT` is applied correctly with `Math.max()`
-- Ensure date math uses `setMonth()` correctly
-
-### Styling Issues
-- Check mobile max-width (should be 400px)
-- Verify color variables are defined in `:root`
-- Ensure flex containers have proper sizing
-
-## Future Enhancements
-
-Possible additions (when requested):
-- Multiple plan tiers
-- Discount codes
-- Payment method selection
-- Insurance integration
-- Booking/checkout integration
-- Analytics tracking
-- Multi-currency support
+Posted to AWS Lambda endpoint. Response may include `invoiceUrl` (Stripe hosted invoice link).
