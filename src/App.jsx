@@ -1,34 +1,158 @@
 import { useState } from 'react'
+import {
+  DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, DEFAULT_SLIDING_SCALE_MAX,
+  SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
+  formatDate, formatCurrency, isValidEmail, parseDueDate, getOneMonthBefore,
+  getPayoffDate, getFirstInvoiceDate, parseUrlParams,
+  calculateMinDeposit, calculateDeposit, getWarnings,
+} from './utils'
+
+// ── Sub-components ─────────────────────────────────────────
+
+// Shared price display/slider used by both "Pay in Full" and "Payment Plan" views
+function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, slidingScaleMin, slidingScaleMax, fixedPrice }) {
+  if (isSlidingScale) {
+    const progress = ((selectedPrice - slidingScaleMin) / (slidingScaleMax - slidingScaleMin)) * 100;
+    return (
+      <section className="section price-section">
+        <div className="price-value">{formatCurrency(selectedPrice)}</div>
+        <div className="slider-wrapper">
+          <input
+            type="range"
+            min={slidingScaleMin}
+            max={slidingScaleMax}
+            step={SLIDING_SCALE_STEP}
+            value={selectedPrice}
+            onChange={(e) => setSelectedPrice(parseInt(e.target.value, 10))}
+            className="slider"
+            aria-label="Select price"
+            style={{ '--progress': `${progress}%` }}
+          />
+          <div className="slider-labels">
+            <span>{formatCurrency(slidingScaleMin)}</span>
+            <span>{formatCurrency(slidingScaleMax)}</span>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="section price-section">
+      <div className="label">Total</div>
+      <div className="price-value">{formatCurrency(fixedPrice)}</div>
+    </section>
+  );
+}
+
+// Success screen shown after submission
+function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPayment, months, totalPrice }) {
+  const firstInvoiceDate = getFirstInvoiceDate();
+
+  return (
+    <div className="app done-view">
+      <div className="done-container">
+        <div className="done-header">
+          <div className="done-header-title">
+            <div className="checkmark">✓</div>
+            <h1>You're All Set!</h1>
+          </div>
+          <p className="done-subtitle">
+            {paymentOption === 'plan'
+              ? <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
+              : <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
+            }
+          </p>
+        </div>
+
+        {invoiceUrl && (
+          <a
+            href={invoiceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="done-pay-now-btn"
+          >
+            {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
+          </a>
+        )}
+
+        {paymentOption === 'plan' && (
+          <div className="done-timeline">
+            <div className="done-timeline-item done-timeline-now">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">Now</span>
+                <span className="done-timeline-detail">Deposit invoice for {formatCurrency(deposit)}</span>
+              </div>
+            </div>
+            <div className="done-timeline-item">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">{formatDate(firstInvoiceDate)}</span>
+                <span className="done-timeline-detail">First monthly invoice — {formatCurrency(monthlyPayment)}</span>
+              </div>
+            </div>
+            <div className="done-timeline-item">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">Then monthly</span>
+                <span className="done-timeline-detail">{months - 1} more invoice{months - 1 !== 1 ? 's' : ''} of {formatCurrency(monthlyPayment)}, sent automatically</span>
+              </div>
+            </div>
+            <div className="done-timeline-item done-timeline-last">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">{formatDate(getPayoffDate(months))}</span>
+                <span className="done-timeline-detail">All paid off</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {paymentOption === 'full' && (
+          <div className="done-summary">
+            <div className="done-card">
+              <span className="done-label">Total</span>
+              <span className="done-value">{formatCurrency(totalPrice)}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="done-info-section">
+          <div className="done-info-item">
+            <span className="done-info-icon">🏦</span>
+            <div>
+              <strong>Please Pay by Bank Account</strong>
+              <p>When you open your invoice, look for the "Bank Account / ACH" option. Paying this way helps us keep the service fee-free for everyone.</p>
+            </div>
+          </div>
+
+          <div className="done-info-item done-info-muted">
+            <span className="done-info-icon">✉️</span>
+            <div>
+              <p>Made a mistake? Just let us know and we'll update it.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────
 
 function App() {
-  const DEFAULT_FIXED_PRICE = 8500;
-  const MIN_DEPOSIT = 250;
-  const MIN_MONTHLY_PAYMENT = 250;
-  const DEFAULT_SLIDING_SCALE_MAX = 8500;
-  const SLIDING_SCALE_STEP = 250;
-  const DEFAULT_MIN = 4000;
-  const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
-  const SUBMISSION_API_URL = import.meta.env.VITE_SUBMISSION_API_URL || 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
+  // URL configuration (read-only, parsed once per render)
+  const { isSlidingScale, originalPrice, dueDate, isExtended, maxPrice, previewDone } = parseUrlParams();
 
-  // Get URL params
-  const params = new URLSearchParams(window.location.search);
-  const isSlidingScale = params.get('slidingScale') === 'true';
-  const originalPrice = params.get('originalPrice') ? parseInt(params.get('originalPrice')) : null;
-  const dueDate = params.get('dueDate') || null;
-  const isExtended = params.get('extended') === 'true';
-  const maxPrice = params.get('maxPrice') ? parseInt(params.get('maxPrice')) : null;
-  const previewDone = params.get('preview') === 'done';
-  
-  // Override prices if maxPrice parameter is provided
+  // Derived pricing constants
   const FIXED_PRICE = maxPrice || DEFAULT_FIXED_PRICE;
   const SLIDING_SCALE_MAX = maxPrice || DEFAULT_SLIDING_SCALE_MAX;
-
-  // Minimum is the original price if provided, otherwise default to $4,000
   const slidingScaleMin = originalPrice || DEFAULT_MIN;
+  const maxMonths = isExtended ? 12 : 9;
 
-  const getInitialSlidingPrice = () => slidingScaleMin;
-
-  const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? getInitialSlidingPrice() : FIXED_PRICE);
+  // State
+  const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? slidingScaleMin : FIXED_PRICE);
   const [months, setMonths] = useState(6);
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);
@@ -40,81 +164,47 @@ function App() {
   const [showAchModal, setShowAchModal] = useState(false);
   const [patientName, setPatientName] = useState(previewDone ? 'Jane Doe' : '');
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
-  const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null)); // 'full' or 'plan'
-  const [invoiceUrl, setInvoiceUrl] = useState(previewDone ? '#' : null); // Stripe hosted_invoice_url
+  const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null));
+  const [invoiceUrl, setInvoiceUrl] = useState(previewDone ? '#' : null);
 
-  // Calculate payoff date (deposit now + N months of payments starting 30 days out)
-  const getPayoffDate = () => {
-    const today = new Date();
-    const payoff = new Date(today);
-    // First monthly invoice is 30 days out, then N-1 more after that
-    payoff.setDate(payoff.getDate() + 30);
-    payoff.setMonth(payoff.getMonth() + months);
-    return payoff;
-  };
-
-  // First monthly invoice date (30 days from now)
-  const getFirstInvoiceDate = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return d;
-  };
-
-  const payoffDate = getPayoffDate();
+  // Derived values
   const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
-  
-  // Minimum deposit: 10% of total (unless in sliding scale mode), but never less than $250
-  const minDepositPercent = isSlidingScale ? 0 : 0.10;
-  const minDepositAmount = Math.max(MIN_DEPOSIT, Math.round(totalPrice * minDepositPercent));
-  
-  // Calculate deposit based on preset or custom
-  const calculatedDeposit = customDeposit !== null 
-    ? Math.max(minDepositAmount, Math.min(customDeposit, totalPrice))
-    : Math.max(minDepositAmount, Math.round(totalPrice * depositPercent));
-  const deposit = calculatedDeposit;
+  const payoffDate = getPayoffDate(months);
+  const minDepositAmount = calculateMinDeposit(totalPrice, isSlidingScale);
+  const deposit = calculateDeposit({ customDeposit, minDepositAmount, totalPrice, depositPercent });
   const remainder = totalPrice - deposit;
   const monthlyPayment = remainder / months;
 
-  // Handle preset button click
+  // Warning flags
+  const { depositBelowMin, depositBelowPercent, depositExceedsTotal, pastDueDate, belowMinPayment, hasWarning } =
+    getWarnings({ customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate });
+
+  // ── Handlers ─────────────────────────────────────────────
+
   const handlePresetClick = (percent) => {
     setDepositPercent(percent);
     setCustomDeposit(null);
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const depositBelowMin = customDeposit !== null && customDeposit < minDepositAmount;
-  const depositBelowPercent = !isSlidingScale && deposit < Math.round(totalPrice * 0.10);
-  const depositExceedsTotal = customDeposit !== null && customDeposit > totalPrice;
-  const hasWarning = (dueDate && payoffDate > new Date(dueDate + 'T00:00:00')) || monthlyPayment < MIN_MONTHLY_PAYMENT || depositBelowMin || depositBelowPercent || depositExceedsTotal;
-
-  // Handle form submission - show name modal
   const handleSubmit = () => {
     if (isSubmitting || hasWarning) return;
     setShowNameModal(true);
   };
 
-  // Simple email validation
-  const isValidEmail = (email) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const closeNameModal = () => {
+    if (isSubmitting) return;
+    setShowNameModal(false);
+    setPatientName('');
+    setPatientEmail('');
+    setSubmitError(null);
   };
 
-  // Validate name/email and show ACH nag modal
+  const handleEmailKeyDown = (e) => {
+    if (e.key === 'Enter' && patientName.trim() && patientEmail.trim() && !isSubmitting) {
+      submitWithName();
+    }
+  };
+
   const submitWithName = () => {
     const trimmedName = patientName.trim();
     const trimmedEmail = patientEmail.trim();
@@ -139,17 +229,13 @@ function App() {
     setShowAchModal(true);
   };
 
-  // Actually submit to webhook after ACH acknowledgment
   const confirmAndSubmit = async () => {
-    const trimmedName = patientName.trim();
-    const trimmedEmail = patientEmail.trim();
-
     setIsSubmitting(true);
     setSubmitError(null);
 
     const payload = {
-      name: trimmedName,
-      email: trimmedEmail,
+      name: patientName.trim(),
+      email: patientEmail.trim(),
       totalPrice,
       paymentOption,
       deposit: paymentOption === 'full' ? totalPrice : deposit,
@@ -165,7 +251,6 @@ function App() {
       customDeposit: paymentOption === 'plan' && customDeposit !== null ? customDeposit : null
     };
 
-    // Guard: never send empty body (e.g. prevents accidental empty POST)
     const bodyString = JSON.stringify(payload);
     if (!bodyString || bodyString === '{}') {
       setSubmitError('Invalid form data. Please try again.');
@@ -176,9 +261,7 @@ function App() {
     try {
       const response = await fetch(SUBMISSION_API_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: bodyString,
       });
 
@@ -186,7 +269,6 @@ function App() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // If the backend returns a Stripe hosted_invoice_url, grab it
       try {
         const data = await response.json();
         if (data?.invoiceUrl) {
@@ -206,99 +288,35 @@ function App() {
     }
   };
 
-  // If submission was successful, show Done view
+  // ── Render ───────────────────────────────────────────────
+
   if (submitSuccess) {
-    const firstInvoiceDate = getFirstInvoiceDate();
-
     return (
-      <div className="app done-view">
-        <div className="done-container">
-          <div className="done-header">
-            <div className="done-header-title">
-              <div className="checkmark">✓</div>
-              <h1>You're All Set!</h1>
-            </div>
-            <p className="done-subtitle">
-              {paymentOption === 'plan'
-                ? <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
-                : <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
-              }
-            </p>
-          </div>
-
-          {invoiceUrl && (
-            <a
-              href={invoiceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="done-pay-now-btn"
-            >
-              {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
-            </a>
-          )}
-
-          {paymentOption === 'plan' && (
-            <div className="done-timeline">
-              <div className="done-timeline-item done-timeline-now">
-                <div className="done-timeline-dot"></div>
-                <div className="done-timeline-content">
-                  <span className="done-timeline-label">Now</span>
-                  <span className="done-timeline-detail">Deposit invoice for {formatCurrency(deposit)}</span>
-                </div>
-              </div>
-              <div className="done-timeline-item">
-                <div className="done-timeline-dot"></div>
-                <div className="done-timeline-content">
-                  <span className="done-timeline-label">{formatDate(firstInvoiceDate)}</span>
-                  <span className="done-timeline-detail">First monthly invoice — {formatCurrency(monthlyPayment)}</span>
-                </div>
-              </div>
-              <div className="done-timeline-item">
-                <div className="done-timeline-dot"></div>
-                <div className="done-timeline-content">
-                  <span className="done-timeline-label">Then monthly</span>
-                  <span className="done-timeline-detail">{months - 1} more invoice{months - 1 !== 1 ? 's' : ''} of {formatCurrency(monthlyPayment)}, sent automatically</span>
-                </div>
-              </div>
-              <div className="done-timeline-item done-timeline-last">
-                <div className="done-timeline-dot"></div>
-                <div className="done-timeline-content">
-                  <span className="done-timeline-label">{formatDate(getPayoffDate())}</span>
-                  <span className="done-timeline-detail">All paid off</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {paymentOption === 'full' && (
-            <div className="done-summary">
-              <div className="done-card">
-                <span className="done-label">Total</span>
-                <span className="done-value">{formatCurrency(totalPrice)}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="done-info-section">
-            <div className="done-info-item">
-              <span className="done-info-icon">🏦</span>
-              <div>
-                <strong>Please Pay by Bank Account</strong>
-                <p>When you open your invoice, look for the "Bank Account / ACH" option. Paying this way helps us keep the service fee-free for everyone.</p>
-              </div>
-            </div>
-
-            <div className="done-info-item done-info-muted">
-              <span className="done-info-icon">✉️</span>
-              <div>
-                <p>Made a mistake? Just let us know and we'll update it.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <DoneView
+        paymentOption={paymentOption}
+        patientEmail={patientEmail}
+        invoiceUrl={invoiceUrl}
+        deposit={deposit}
+        monthlyPayment={monthlyPayment}
+        months={months}
+        totalPrice={totalPrice}
+      />
     );
   }
+
+  const priceSectionProps = {
+    isSlidingScale,
+    selectedPrice,
+    setSelectedPrice,
+    slidingScaleMin,
+    slidingScaleMax: SLIDING_SCALE_MAX,
+    fixedPrice: FIXED_PRICE,
+  };
+
+  // "Pay by" date text for the info section (1 month before due date)
+  const payByDateText = dueDate
+    ? `. We typically ask that your balance be paid off by ${formatDate(getOneMonthBefore(parseDueDate(dueDate)))}`
+    : '';
 
   return (
     <div className={`app ${isSlidingScale ? 'sliding-scale-mode' : ''}`}>
@@ -310,7 +328,7 @@ function App() {
         </div>
         {dueDate && (
           <div className="due-date">
-            Due Date: {formatDate(new Date(dueDate + 'T00:00:00'))}
+            Due Date: {formatDate(parseDueDate(dueDate))}
           </div>
         )}
       </header>
@@ -325,17 +343,11 @@ function App() {
           </p>
           <div className="label" style={{ marginBottom: '16px' }}>How would you like to pay?</div>
           <div className="payment-options">
-            <button
-              className="payment-option-btn"
-              onClick={() => setPaymentOption('full')}
-            >
+            <button className="payment-option-btn" onClick={() => setPaymentOption('full')}>
               <div className="option-title">Pay in Full</div>
               <div className="option-description">Pay the full amount upfront</div>
             </button>
-            <button
-              className="payment-option-btn"
-              onClick={() => setPaymentOption('plan')}
-            >
+            <button className="payment-option-btn" onClick={() => setPaymentOption('plan')}>
               <div className="option-title">Payment Plan</div>
               <div className="option-description">Split into monthly payments</div>
             </button>
@@ -346,35 +358,7 @@ function App() {
       {/* Full Payment Option */}
       {paymentOption === 'full' && (
         <>
-          {/* Price Section */}
-          <section className="section price-section">
-            {isSlidingScale ? (
-              <>
-                <div className="price-value">{formatCurrency(selectedPrice)}</div>
-                <div className="slider-wrapper">
-                  <input
-                    type="range"
-                    min={slidingScaleMin}
-                    max={SLIDING_SCALE_MAX}
-                    step={SLIDING_SCALE_STEP}
-                    value={selectedPrice}
-                    onChange={(e) => setSelectedPrice(parseInt(e.target.value))}
-                    className="slider"
-                    style={{ '--progress': `${((selectedPrice - slidingScaleMin) / (SLIDING_SCALE_MAX - slidingScaleMin)) * 100}%` }}
-                  />
-                  <div className="slider-labels">
-                    <span>{formatCurrency(slidingScaleMin)}</span>
-                    <span>{formatCurrency(SLIDING_SCALE_MAX)}</span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="label">Total</div>
-                <div className="price-value">{formatCurrency(FIXED_PRICE)}</div>
-              </>
-            )}
-          </section>
+          <PriceSection {...priceSectionProps} />
 
           {/* Name & Email Form */}
           <section className="section">
@@ -393,11 +377,7 @@ function App() {
                 placeholder="Patient email"
                 value={patientEmail}
                 onChange={(e) => setPatientEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && patientName.trim() && patientEmail.trim() && !isSubmitting) {
-                    submitWithName();
-                  }
-                }}
+                onKeyDown={handleEmailKeyDown}
               />
             </div>
             {submitError && (
@@ -434,135 +414,107 @@ function App() {
       {/* Payment Plan Option */}
       {paymentOption === 'plan' && (
         <>
+          <PriceSection {...priceSectionProps} />
 
-      {/* Price Section */}
-      <section className="section price-section">
-        {isSlidingScale ? (
-          <>
-            <div className="price-value">{formatCurrency(selectedPrice)}</div>
+          {/* Timeline Section */}
+          <section className="section timeline-section">
+            <div className="timeline-header">
+              <span className="label">Pay over</span>
+              <span className="months-value">{months} {months === 1 ? 'month' : 'months'}</span>
+            </div>
             <div className="slider-wrapper">
               <input
                 type="range"
-                min={slidingScaleMin}
-                max={SLIDING_SCALE_MAX}
-                step={SLIDING_SCALE_STEP}
-                value={selectedPrice}
-                onChange={(e) => setSelectedPrice(parseInt(e.target.value))}
+                min="1"
+                max={maxMonths}
+                value={months}
+                onChange={(e) => setMonths(parseInt(e.target.value, 10))}
                 className="slider"
-                style={{ '--progress': `${((selectedPrice - slidingScaleMin) / (SLIDING_SCALE_MAX - slidingScaleMin)) * 100}%` }}
+                aria-label="Select payment duration"
+                style={{ '--progress': `${((months - 1) / (maxMonths - 1)) * 100}%` }}
               />
-              <div className="slider-labels">
-                <span>{formatCurrency(slidingScaleMin)}</span>
-                <span>{formatCurrency(SLIDING_SCALE_MAX)}</span>
-              </div>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="label">Total</div>
-            <div className="price-value">{formatCurrency(FIXED_PRICE)}</div>
-          </>
-        )}
-      </section>
+          </section>
 
-      {/* Timeline Section */}
-      <section className="section timeline-section">
-        <div className="timeline-header">
-          <span className="label">Pay over</span>
-          <span className="months-value">{months} {months === 1 ? 'month' : 'months'}</span>
-        </div>
-        <div className="slider-wrapper">
-          <input
-            type="range"
-            min="1"
-            max={isExtended ? 12 : 9}
-            value={months}
-            onChange={(e) => setMonths(parseInt(e.target.value))}
-            className="slider"
-            style={{ '--progress': `${((months - 1) / (isExtended ? 11 : 8)) * 100}%` }}
-          />
-        </div>
-      </section>
+          {/* Deposit Section */}
+          <div className="deposit-section">
+            <span className="label">Deposit</span>
+            <div className="deposit-buttons">
+              {DEPOSIT_PRESETS.map(percent => (
+                <button
+                  key={percent}
+                  className={`quick-btn ${depositPercent === percent && customDeposit === null ? 'active' : ''}`}
+                  onClick={() => handlePresetClick(percent)}
+                >
+                  {Math.round(percent * 100)}%
+                </button>
+              ))}
+              <input
+                type="number"
+                inputMode="numeric"
+                className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
+                placeholder="Custom"
+                min={minDepositAmount}
+                value={customDeposit !== null ? customDeposit : ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || value === null) {
+                    setCustomDeposit(null);
+                    setDepositPercent(0.10);
+                  } else {
+                    const num = parseInt(value, 10);
+                    if (!isNaN(num)) {
+                      setCustomDeposit(num);
+                      setDepositPercent(null);
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
 
-      {/* Deposit Section */}
-      <div className="deposit-section">
-        <span className="label">Deposit</span>
-        <div className="deposit-buttons">
-          {DEPOSIT_PRESETS.map(percent => (
-            <button
-              key={percent}
-              className={`quick-btn ${depositPercent === percent && customDeposit === null ? 'active' : ''}`}
-              onClick={() => handlePresetClick(percent)}
-            >
-              {Math.round(percent * 100)}%
-            </button>
-          ))}
-          <input
-            type="number"
-            inputMode="numeric"
-            className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
-            placeholder="Custom"
-            min={minDepositAmount}
-            value={customDeposit !== null ? customDeposit : ''}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value === '' || value === null) {
-                setCustomDeposit(null);
-                setDepositPercent(0.10);
-              } else {
-                const num = parseInt(value);
-                if (!isNaN(num)) {
-                  setCustomDeposit(num);
-                  setDepositPercent(null);
-                }
-              }
-            }}
-          />
-        </div>
-      </div>
+          {/* Summary Cards */}
+          <div className="summary-cards">
+            <div className="summary-card">
+              <span className="card-label">Deposit Today</span>
+              <span className="card-amount">{formatCurrency(deposit)}</span>
+            </div>
+            <div className="summary-card">
+              <span className="card-label">{months}× Monthly</span>
+              <span className="card-amount">{formatCurrency(monthlyPayment)}</span>
+            </div>
+          </div>
 
-      {/* Summary Cards */}
-      <div className="summary-cards">
-        <div className="summary-card">
-          <span className="card-label">Deposit Today</span>
-          <span className="card-amount">{formatCurrency(deposit)}</span>
-        </div>
-        <div className="summary-card">
-          <span className="card-label">{months}× Monthly</span>
-          <span className="card-amount">{formatCurrency(monthlyPayment)}</span>
-        </div>
-      </div>
-
-      {/* Warnings */}
-      {hasWarning && (
-        <div className="warnings">
-          {dueDate && payoffDate > new Date(dueDate + 'T00:00:00') && (
-            <div className="warning">
-              This plan extends past your due date—adjust months to finish earlier.
+          {/* Warnings */}
+          {hasWarning && (
+            <div className="warnings">
+              {pastDueDate && (
+                <div className="warning">
+                  This plan extends past your due date—adjust months to finish earlier.
+                </div>
+              )}
+              {belowMinPayment && (
+                <div className="warning">
+                  The minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.
+                </div>
+              )}
+              {depositBelowMin && (
+                <div className="warning">
+                  Minimum deposit is {formatCurrency(minDepositAmount)}
+                </div>
+              )}
+              {depositBelowPercent && !depositBelowMin && (
+                <div className="warning">
+                  Minimum down payment is 10% ({formatCurrency(Math.round(totalPrice * 0.10))})
+                </div>
+              )}
+              {depositExceedsTotal && (
+                <div className="warning">
+                  Deposit cannot exceed total price
+                </div>
+              )}
             </div>
           )}
-          {monthlyPayment < MIN_MONTHLY_PAYMENT && (
-            <div className="warning">
-              The minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.
-            </div>
-          )}
-          {depositBelowMin && (
-            <div className="warning">
-              Minimum deposit is {formatCurrency(minDepositAmount)}
-            </div>
-          )}
-          {depositBelowPercent && !depositBelowMin && (
-            <div className="warning">
-              Minimum down payment is 10% ({formatCurrency(Math.round(totalPrice * 0.10))})
-            </div>
-          )}
-          {depositExceedsTotal && (
-            <div className="warning">
-              Deposit cannot exceed total price
-            </div>
-          )}
-        </div>
-      )}
 
           {/* Info Section */}
           <footer className="info-section">
@@ -572,7 +524,7 @@ function App() {
             </div>
             <div className="info-item">
               <strong>How It Works</strong>
-              <p>After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that{dueDate ? `. We typically ask that your balance be paid off by ${formatDate(new Date(new Date(dueDate + 'T00:00:00').setMonth(new Date(dueDate + 'T00:00:00').getMonth() - 1)))}` : ''}.</p>
+              <p>After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that{payByDateText}.</p>
             </div>
             <div className="info-item">
               <strong>Need more flexibility?</strong>
@@ -594,13 +546,6 @@ function App() {
             {isSubmitting ? 'Saving...' : 'Save'}
           </button>
 
-          {/* Success Message */}
-          {submitSuccess && (
-            <div className="success-message">
-              Payment plan submitted successfully!
-            </div>
-          )}
-
           {/* Error Message */}
           {submitError && (
             <div className="error-message">
@@ -614,7 +559,7 @@ function App() {
       {showContactModal && (
         <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowContactModal(false)}>×</button>
+            <button className="modal-close" aria-label="Close" onClick={() => setShowContactModal(false)}>×</button>
             <h2>Contact Us</h2>
             <div className="contact-info">
               <div className="contact-item">
@@ -632,27 +577,9 @@ function App() {
 
       {/* Name & Email Entry Modal */}
       {showNameModal && (
-        <div className="modal-overlay" onClick={() => {
-          if (!isSubmitting) {
-            setShowNameModal(false);
-            setPatientName('');
-            setPatientEmail('');
-          }
-        }}>
+        <div className="modal-overlay" onClick={closeNameModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="modal-close"
-              onClick={() => {
-                if (!isSubmitting) {
-                  setShowNameModal(false);
-                  setPatientName('');
-                  setPatientEmail('');
-                }
-              }}
-              disabled={isSubmitting}
-            >
-              ×
-            </button>
+            <button className="modal-close" aria-label="Close" onClick={closeNameModal} disabled={isSubmitting}>×</button>
             <h2>Enter Patient Details</h2>
             <div className="name-input-wrapper">
               <input
@@ -670,11 +597,7 @@ function App() {
                 placeholder="Patient email"
                 value={patientEmail}
                 onChange={(e) => setPatientEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && patientName.trim() && patientEmail.trim() && !isSubmitting) {
-                    submitWithName();
-                  }
-                }}
+                onKeyDown={handleEmailKeyDown}
                 disabled={isSubmitting}
               />
             </div>
@@ -686,14 +609,7 @@ function App() {
             <div className="modal-actions">
               <button
                 className="modal-cancel-btn"
-                onClick={() => {
-                  if (!isSubmitting) {
-                    setShowNameModal(false);
-                    setPatientName('');
-                    setPatientEmail('');
-                    setSubmitError(null);
-                  }
-                }}
+                onClick={closeNameModal}
                 disabled={isSubmitting}
               >
                 Cancel
