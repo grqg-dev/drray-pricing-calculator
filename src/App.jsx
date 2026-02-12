@@ -17,6 +17,7 @@ function App() {
   const dueDate = params.get('dueDate') || null;
   const isExtended = params.get('extended') === 'true';
   const maxPrice = params.get('maxPrice') ? parseInt(params.get('maxPrice')) : null;
+  const previewDone = params.get('preview') === 'done';
   
   // Override prices if maxPrice parameter is provided
   const FIXED_PRICE = maxPrice || DEFAULT_FIXED_PRICE;
@@ -32,15 +33,15 @@ function App() {
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(previewDone);
   const [submitError, setSubmitError] = useState(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [showAchModal, setShowAchModal] = useState(false);
-  const [patientName, setPatientName] = useState('');
-  const [patientEmail, setPatientEmail] = useState('');
-  const [paymentOption, setPaymentOption] = useState(isSlidingScale ? 'plan' : null); // 'full' or 'plan'
-  const [invoiceUrl, setInvoiceUrl] = useState(null); // Stripe hosted_invoice_url
+  const [patientName, setPatientName] = useState(previewDone ? 'Jane Doe' : '');
+  const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
+  const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null)); // 'full' or 'plan'
+  const [invoiceUrl, setInvoiceUrl] = useState(previewDone ? '#' : null); // Stripe hosted_invoice_url
 
   // Calculate payoff date (deposit now + N months of payments starting 30 days out)
   const getPayoffDate = () => {
