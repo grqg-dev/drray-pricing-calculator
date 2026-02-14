@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, DEFAULT_SLIDING_SCALE_MAX,
-  SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
-  formatDate, formatCurrency, isValidEmail, parseDueDate, getOneMonthBefore,
-  getPayoffDate, getFirstInvoiceDate, parseUrlParams,
-  calculateMinDeposit, calculateDeposit, getWarnings,
+  DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, MIN_INSTALLMENT_PAYMENT,
+  DEFAULT_SLIDING_SCALE_MAX, SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS,
+  SUBMISSION_API_URL, IS_STRIPE_TEST_MODE, formatDate, formatCurrency, isValidEmail, parseDueDate,
+  getOneMonthBefore, getPayoffDate, getFirstInvoiceDate, getMinDueDate, getMaxDueDate,
+  parseUrlParams, calculateMinDeposit, calculateDeposit, getWarnings, getInstallmentWarnings,
 } from './utils'
 
 // ── Sub-components ─────────────────────────────────────────
@@ -46,11 +46,16 @@ function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, sliding
 }
 
 // Success screen shown after submission
-function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPayment, months, totalPrice }) {
+function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPayment, months, totalPrice, installments }) {
   const firstInvoiceDate = getFirstInvoiceDate();
 
   return (
     <div className="app done-view">
+      {IS_STRIPE_TEST_MODE && (
+        <div className="test-mode-badge test-mode-badge-fixed" title="Using Stripe test keys — no real charges">
+          Test mode
+        </div>
+      )}
       <div className="done-container">
         <div className="done-header">
           <div className="done-header-title">
@@ -58,7 +63,7 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
             <h1>You're All Set!</h1>
           </div>
           <p className="done-subtitle">
-            {paymentOption === 'plan'
+            {paymentOption === 'plan' || paymentOption === 'installment'
               ? <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
               : <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
             }
@@ -72,7 +77,7 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
             rel="noopener noreferrer"
             className="done-pay-now-btn"
           >
-            {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
+            {paymentOption === 'plan' || paymentOption === 'installment' ? 'Pay My Deposit' : 'Pay Now'}
           </a>
         )}
 
@@ -104,6 +109,34 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
               <div className="done-timeline-content">
                 <span className="done-timeline-label">{formatDate(getPayoffDate(months))}</span>
                 <span className="done-timeline-detail">All paid off</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {paymentOption === 'installment' && installments?.length > 0 && (
+          <div className="done-timeline">
+            <div className="done-timeline-item done-timeline-now">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">Now</span>
+                <span className="done-timeline-detail">Deposit invoice for {formatCurrency(deposit)}</span>
+              </div>
+            </div>
+            {installments.map((inst, i) => (
+              <div key={i} className="done-timeline-item">
+                <div className="done-timeline-dot"></div>
+                <div className="done-timeline-content">
+                  <span className="done-timeline-label">{formatDate(parseDueDate(inst.dueDate))}</span>
+                  <span className="done-timeline-detail">Invoice for {formatCurrency(inst.amount)}</span>
+                </div>
+              </div>
+            ))}
+            <div className="done-timeline-item done-timeline-last">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">All paid off</span>
+                <span className="done-timeline-detail">After your last scheduled invoice</span>
               </div>
             </div>
           </div>
@@ -166,6 +199,8 @@ function App() {
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
   const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null));
   const [invoiceUrl, setInvoiceUrl] = useState(previewDone ? '#' : null);
+  const [installmentCount, setInstallmentCount] = useState(2);
+  const [installments, setInstallments] = useState([]);
 
   // Derived values
   const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
@@ -179,6 +214,11 @@ function App() {
   const { depositBelowMin, depositBelowPercent, depositExceedsTotal, pastDueDate, belowMinPayment, hasWarning } =
     getWarnings({ customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate });
 
+  const installmentWarnings = paymentOption === 'installment'
+    ? getInstallmentWarnings({ customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, installments, dueDate })
+    : null;
+  const effectiveHasWarning = paymentOption === 'installment' ? (installmentWarnings?.hasWarning ?? false) : hasWarning;
+
   // ── Handlers ─────────────────────────────────────────────
 
   const handlePresetClick = (percent) => {
@@ -186,8 +226,39 @@ function App() {
     setCustomDeposit(null);
   };
 
+  function getDefaultInstallments(rem, count) {
+    const base = Math.floor(rem / count);
+    const amounts = Array(count).fill(base);
+    amounts[count - 1] = rem - base * (count - 1);
+    const dates = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + 30 + (i * 30));
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    return amounts.map((a, i) => ({ amount: a, dueDate: dates[i] }));
+  }
+
+  const handleInstallmentCountChange = (count) => {
+    setInstallmentCount(count);
+    setInstallments(getDefaultInstallments(remainder, count));
+  };
+
+  const handleSelectInstallment = () => {
+    setInstallmentCount(2);
+    setInstallments(getDefaultInstallments(remainder, 2));
+    setPaymentOption('installment');
+  };
+
+  useEffect(() => {
+    if (paymentOption === 'installment' && installments.length === 0 && remainder > 0) {
+      setInstallments(getDefaultInstallments(remainder, 2));
+      setInstallmentCount(2);
+    }
+  }, [paymentOption, remainder]);
+
   const handleSubmit = () => {
-    if (isSubmitting || hasWarning) return;
+    if (isSubmitting || effectiveHasWarning) return;
     setShowNameModal(true);
   };
 
@@ -239,16 +310,17 @@ function App() {
       totalPrice,
       paymentOption,
       deposit: paymentOption === 'full' ? totalPrice : deposit,
-      monthlyPayment: paymentOption === 'full' ? 0 : monthlyPayment,
-      months: paymentOption === 'full' ? 0 : months,
-      payoffDate: paymentOption === 'full' ? null : payoffDate.toISOString(),
+      monthlyPayment: paymentOption === 'full' || paymentOption === 'installment' ? 0 : monthlyPayment,
+      months: paymentOption === 'full' || paymentOption === 'installment' ? 0 : months,
+      payoffDate: paymentOption === 'full' || paymentOption === 'installment' ? null : payoffDate.toISOString(),
       dueDate: dueDate || null,
       isSlidingScale,
       originalPrice: originalPrice || null,
       isExtended,
       timestamp: new Date().toISOString(),
-      depositPercent: paymentOption === 'plan' && customDeposit === null ? depositPercent : null,
-      customDeposit: paymentOption === 'plan' && customDeposit !== null ? customDeposit : null
+      depositPercent: (paymentOption === 'plan' || paymentOption === 'installment') && customDeposit === null ? depositPercent : null,
+      customDeposit: (paymentOption === 'plan' || paymentOption === 'installment') && customDeposit !== null ? customDeposit : null,
+      ...(paymentOption === 'installment' && { installments })
     };
 
     const bodyString = JSON.stringify(payload);
@@ -300,6 +372,7 @@ function App() {
         monthlyPayment={monthlyPayment}
         months={months}
         totalPrice={totalPrice}
+        installments={paymentOption === 'installment' ? installments : undefined}
       />
     );
   }
@@ -326,11 +399,18 @@ function App() {
           <h1>Payment Calculator</h1>
           <p className="header-subtitle">Choose a payment plan that works for you</p>
         </div>
-        {dueDate && (
-          <div className="due-date">
-            Due Date: {formatDate(parseDueDate(dueDate))}
-          </div>
-        )}
+        <div className="header-right">
+          {dueDate && (
+            <div className="due-date">
+              Due Date: {formatDate(parseDueDate(dueDate))}
+            </div>
+          )}
+          {IS_STRIPE_TEST_MODE && (
+            <div className="test-mode-badge" title="Using Stripe test keys — no real charges">
+              Test mode
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Payment Option Selection */}
@@ -350,6 +430,10 @@ function App() {
             <button className="payment-option-btn" onClick={() => setPaymentOption('plan')}>
               <div className="option-title">Payment Plan</div>
               <div className="option-description">Split into monthly payments</div>
+            </button>
+            <button className="payment-option-btn" onClick={handleSelectInstallment}>
+              <div className="option-title">Custom Installment</div>
+              <div className="option-description">Deposit today, schedule future invoices</div>
             </button>
           </div>
         </section>
@@ -394,8 +478,7 @@ function App() {
               <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
             </div>
             <div className="info-item">
-              <strong>Need a payment plan instead?</strong>
-              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to payment plan</button></p>
+              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Go back</button></p>
             </div>
           </footer>
 
@@ -527,12 +610,7 @@ function App() {
               <p>After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that{payByDateText}.</p>
             </div>
             <div className="info-item">
-              <strong>Need more flexibility?</strong>
-              <p>Monthly payments are just our default — we can adjust the schedule or payoff date to fit your situation. <button className="contact-link" onClick={() => setShowContactModal(true)}>Contact us</button></p>
-            </div>
-            <div className="info-item">
-              <strong>Want to pay in full instead?</strong>
-              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to full payment</button></p>
+              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Go back</button></p>
             </div>
           </footer>
 
@@ -547,6 +625,191 @@ function App() {
           </button>
 
           {/* Error Message */}
+          {submitError && (
+            <div className="error-message">
+              {submitError}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Custom Installment Option */}
+      {paymentOption === 'installment' && (
+        <>
+          <PriceSection {...priceSectionProps} />
+
+          {/* Installment count */}
+          <section className="section">
+            <div className="label" style={{ marginBottom: '12px' }}>Number of future invoices</div>
+            <div className="deposit-buttons">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  className={`quick-btn ${installmentCount === n ? 'active' : ''}`}
+                  onClick={() => handleInstallmentCountChange(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Deposit Section */}
+          <div className="deposit-section">
+            <span className="label">Deposit</span>
+            <div className="deposit-buttons">
+              {DEPOSIT_PRESETS.map((percent) => (
+                <button
+                  key={percent}
+                  className={`quick-btn ${depositPercent === percent && customDeposit === null ? 'active' : ''}`}
+                  onClick={() => handlePresetClick(percent)}
+                >
+                  {Math.round(percent * 100)}%
+                </button>
+              ))}
+              <input
+                type="number"
+                inputMode="numeric"
+                className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
+                placeholder="Custom"
+                min={minDepositAmount}
+                value={customDeposit !== null ? customDeposit : ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || value === null) {
+                    setCustomDeposit(null);
+                    setDepositPercent(0.10);
+                  } else {
+                    const num = parseInt(value, 10);
+                    if (!isNaN(num)) {
+                      setCustomDeposit(num);
+                      setDepositPercent(null);
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Installment rows */}
+          {installments.length > 0 && (
+            <section className="section installment-rows">
+              <div className="installment-rows-header">
+                <span className="label">Future invoices</span>
+                <button
+                  type="button"
+                  className="installment-fix-btn"
+                  onClick={() => setInstallments(getDefaultInstallments(remainder, installmentCount))}
+                >
+                  Distribute evenly
+                </button>
+              </div>
+              {installments.map((inst, i) => (
+                <div key={i} className="installment-row">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="deposit-input"
+                    min={MIN_INSTALLMENT_PAYMENT}
+                    value={inst.amount}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      const next = [...installments];
+                      next[i] = { ...next[i], amount: isNaN(val) ? 0 : val };
+                      setInstallments(next);
+                    }}
+                    aria-label={`Invoice ${i + 1} amount`}
+                  />
+                  <input
+                    type="date"
+                    className="installment-date-input"
+                    min={getMinDueDate().toISOString().slice(0, 10)}
+                    max={getMaxDueDate().toISOString().slice(0, 10)}
+                    value={inst.dueDate || ''}
+                    onChange={(e) => {
+                      const next = [...installments];
+                      next[i] = { ...next[i], dueDate: e.target.value };
+                      setInstallments(next);
+                    }}
+                    aria-label={`Invoice ${i + 1} due date`}
+                  />
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* Summary Cards */}
+          <div className="summary-cards">
+            <div className="summary-card">
+              <span className="card-label">Deposit Today</span>
+              <span className="card-amount">{formatCurrency(deposit)}</span>
+            </div>
+            <div className="summary-card">
+              <span className="card-label">{installmentCount}× Future</span>
+              <span className="card-amount">{formatCurrency(installments.length ? installments.reduce((s, i) => s + i.amount, 0) : 0)} total</span>
+            </div>
+          </div>
+
+          {/* Warnings */}
+          {effectiveHasWarning && installmentWarnings && (
+            <div className="warnings">
+              {installmentWarnings.dateBeforeMin && (
+                <div className="warning">Each due date must be at least 30 days from today.</div>
+              )}
+              {installmentWarnings.dateAfterMax && (
+                <div className="warning">Due dates cannot be more than 10 months from today.</div>
+              )}
+              {installmentWarnings.duplicateDates && (
+                <div className="warning">Each invoice must have a unique due date.</div>
+              )}
+              {installmentWarnings.sumMismatch && (
+                <div className="warning">
+                  Invoice amounts add up to {formatCurrency(installments.reduce((s, i) => s + i.amount, 0))} but should be {formatCurrency(remainder)} (total minus deposit). Use "Distribute evenly" or adjust amounts.
+                </div>
+              )}
+              {installmentWarnings.belowMinInstallment && (
+                <div className="warning">Minimum per invoice is {formatCurrency(MIN_INSTALLMENT_PAYMENT)}.</div>
+              )}
+              {installmentWarnings.pastDueDate && (
+                <div className="warning">Your last invoice extends past your due date—adjust dates.</div>
+              )}
+              {installmentWarnings.depositBelowMin && (
+                <div className="warning">Minimum deposit is {formatCurrency(minDepositAmount)}</div>
+              )}
+              {installmentWarnings.depositBelowPercent && !installmentWarnings.depositBelowMin && (
+                <div className="warning">Minimum down payment is 10% ({formatCurrency(Math.round(totalPrice * 0.10))})</div>
+              )}
+              {installmentWarnings.depositExceedsTotal && (
+                <div className="warning">Deposit cannot exceed total price</div>
+              )}
+            </div>
+          )}
+
+          {/* Info Section */}
+          <footer className="info-section">
+            <div className="info-item">
+              <strong>Payment Methods</strong>
+              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
+            </div>
+            <div className="info-item">
+              <strong>How It Works</strong>
+              <p>After you submit, we'll send a deposit invoice right away. Your future invoices will be sent automatically on the dates you choose.</p>
+            </div>
+            <div className="info-item">
+              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Go back</button></p>
+            </div>
+          </footer>
+
+          {/* Submit Button */}
+          <button
+            className="submit-btn"
+            onClick={handleSubmit}
+            disabled={isSubmitting || effectiveHasWarning}
+          >
+            {isSubmitting && <div className="spinner"></div>}
+            {isSubmitting ? 'Saving...' : 'Save'}
+          </button>
+
           {submitError && (
             <div className="error-message">
               {submitError}

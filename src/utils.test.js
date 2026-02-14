@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   formatDate, formatCurrency, isValidEmail,
   parseDueDate, getOneMonthBefore, getPayoffDate, getFirstInvoiceDate,
+  getMaxDueDate, getMinDueDate,
+  validateInstallmentDates, validateInstallmentAmounts, getInstallmentWarnings,
   calculateMinDeposit, calculateDeposit, getWarnings,
   DEFAULT_FIXED_PRICE, MIN_DEPOSIT, MIN_MONTHLY_PAYMENT,
 } from './utils'
@@ -115,6 +117,158 @@ describe('getFirstInvoiceDate', () => {
 
     const result = getFirstInvoiceDate();
     expect(Math.abs(result.getTime() - expected.getTime())).toBeLessThan(1000);
+  });
+})
+
+describe('getMaxDueDate', () => {
+  it('returns date ~10 months from now', () => {
+    const expected = new Date();
+    expected.setMonth(expected.getMonth() + 10);
+
+    const result = getMaxDueDate();
+    expect(Math.abs(result.getTime() - expected.getTime())).toBeLessThan(1000);
+  });
+})
+
+describe('getMinDueDate', () => {
+  it('returns date ~30 days from now', () => {
+    const expected = new Date();
+    expected.setDate(expected.getDate() + 30);
+
+    const result = getMinDueDate();
+    expect(Math.abs(result.getTime() - expected.getTime())).toBeLessThan(1000);
+  });
+})
+
+describe('validateInstallmentDates', () => {
+  function dateStr(daysFromNow) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromNow);
+    return d.toISOString().slice(0, 10);
+  }
+
+  it('returns valid for dates within range', () => {
+    expect(validateInstallmentDates([dateStr(60)])).toEqual({ valid: true });
+    expect(validateInstallmentDates([dateStr(60), dateStr(90)])).toEqual({ valid: true });
+  });
+
+  it('returns invalid for empty array', () => {
+    expect(validateInstallmentDates([])).toEqual({ valid: false, reason: 'empty' });
+  });
+
+  it('returns invalid for date before min (30 days)', () => {
+    expect(validateInstallmentDates([dateStr(7)])).toEqual({ valid: false, reason: 'before_min' });
+  });
+
+  it('returns invalid for date after max (10 months)', () => {
+    expect(validateInstallmentDates([dateStr(400)])).toEqual({ valid: false, reason: 'after_max' });
+  });
+
+  it('returns invalid for missing/empty date string', () => {
+    expect(validateInstallmentDates([''])).toEqual({ valid: false, reason: 'missing_date' });
+  });
+
+  it('returns invalid for duplicate dates', () => {
+    const d = dateStr(60);
+    expect(validateInstallmentDates([d, d])).toEqual({ valid: false, reason: 'duplicate' });
+  });
+})
+
+describe('validateInstallmentAmounts', () => {
+  it('returns valid when sum equals remainder and each >= min', () => {
+    expect(validateInstallmentAmounts([1275, 1275], 2550)).toEqual({ valid: true });
+    expect(validateInstallmentAmounts([250], 250)).toEqual({ valid: true });
+  });
+
+  it('returns invalid when sum does not match remainder', () => {
+    expect(validateInstallmentAmounts([1000, 1000], 2550)).toEqual({ valid: false, reason: 'sum_mismatch' });
+  });
+
+  it('returns invalid when any amount below minimum', () => {
+    expect(validateInstallmentAmounts([200, 2350], 2550)).toEqual({ valid: false, reason: 'below_min' });
+  });
+
+  it('accepts amounts at exactly minimum', () => {
+    expect(validateInstallmentAmounts([250, 250], 500)).toEqual({ valid: true });
+  });
+})
+
+describe('getInstallmentWarnings', () => {
+  function dateStr(daysFromNow) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromNow);
+    return d.toISOString().slice(0, 10);
+  }
+
+  const baseParams = {
+    customDeposit: null,
+    minDepositAmount: 850,
+    deposit: 850,
+    totalPrice: 8500,
+    isSlidingScale: false,
+    installments: [
+      { amount: 3825, dueDate: dateStr(60) },
+      { amount: 3825, dueDate: dateStr(90) },
+    ],
+  };
+
+  it('returns no warnings for valid installment plan', () => {
+    const result = getInstallmentWarnings(baseParams);
+    expect(result.hasWarning).toBe(false);
+  });
+
+  it('warns when deposit below minimum', () => {
+    const result = getInstallmentWarnings({
+      ...baseParams,
+      customDeposit: 100,
+      minDepositAmount: 850,
+    });
+    expect(result.depositBelowMin).toBe(true);
+    expect(result.hasWarning).toBe(true);
+  });
+
+  it('warns when deposit below 10% in fixed mode', () => {
+    const result = getInstallmentWarnings({
+      ...baseParams,
+      deposit: 500,
+      isSlidingScale: false,
+    });
+    expect(result.depositBelowPercent).toBe(true);
+    expect(result.hasWarning).toBe(true);
+  });
+
+  it('warns when installment amounts do not sum to remainder', () => {
+    const result = getInstallmentWarnings({
+      ...baseParams,
+      installments: [
+        { amount: 1000, dueDate: dateStr(60) },
+        { amount: 1000, dueDate: dateStr(90) },
+      ],
+    });
+    expect(result.sumMismatch).toBe(true);
+    expect(result.hasWarning).toBe(true);
+  });
+
+  it('warns when installment amount below minimum', () => {
+    const result = getInstallmentWarnings({
+      ...baseParams,
+      installments: [
+        { amount: 200, dueDate: dateStr(60) },
+        { amount: 7450, dueDate: dateStr(90) },
+      ],
+    });
+    expect(result.belowMinInstallment).toBe(true);
+    expect(result.hasWarning).toBe(true);
+  });
+
+  it('warns when last due date is past plan due date', () => {
+    const result = getInstallmentWarnings({
+      ...baseParams,
+      dueDate: dateStr(45),
+      installments: [{ amount: 7650, dueDate: dateStr(90) }],
+    });
+    expect(result.pastDueDate).toBe(true);
+    expect(result.hasWarning).toBe(true);
   });
 })
 
