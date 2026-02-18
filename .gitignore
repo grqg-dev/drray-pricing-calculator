@@ -31,3 +31,4 @@ amplify.yml
 .cursor/
 .shared/
 
+.env.production
