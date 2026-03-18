@@ -1,9 +1,9 @@
 // ── Constants ──────────────────────────────────────────────
 
-export const DEFAULT_FIXED_PRICE = 8500;
+export const DEFAULT_FIXED_PRICE = 9000;
 export const MIN_DEPOSIT = 250;
 export const MIN_MONTHLY_PAYMENT = 250;
-export const DEFAULT_SLIDING_SCALE_MAX = 8500;
+export const DEFAULT_SLIDING_SCALE_MAX = 9000;
 export const SLIDING_SCALE_STEP = 250;
 export const DEFAULT_MIN = 4000;
 export const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
