@@ -124,6 +124,7 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
             <div>
               <strong>Please Pay by Bank Account</strong>
               <p>When you open your invoice, look for the "Bank Account / ACH" option. Paying this way helps us keep the service fee-free for everyone.</p>
+              <p className="done-debit-note"><strong>Debit card users:</strong> Your debit card pulls from the same bank account — just choose "Bank Account / ACH" instead for the same result with no processing fees.</p>
             </div>
           </div>
 
@@ -391,7 +392,8 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
+              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit card — it helps us keep things fee-free for everyone.</p>
+              <p className="info-debit-note"><strong>Thinking about using a debit card?</strong> Since it pulls from your bank account anyway, just select "Bank Account / ACH" on the invoice — same money, no processing fees.</p>
             </div>
             <div className="info-item">
               <strong>Need a payment plan instead?</strong>
@@ -520,7 +522,8 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
+              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit card — it helps us keep things fee-free for everyone.</p>
+              <p className="info-debit-note"><strong>Thinking about using a debit card?</strong> Since it pulls from your bank account anyway, just select "Bank Account / ACH" on the invoice — same money, no processing fees.</p>
             </div>
             <div className="info-item">
               <strong>How It Works</strong>
@@ -634,7 +637,10 @@ function App() {
             <div className="ach-modal-icon">🏦</div>
             <h2>One Quick Thing</h2>
             <p className="ach-modal-message">
-              We don't charge processing fees, and we'd love to keep it that way. When you receive your invoice, <strong>Please pay by bank account (ACH)</strong> rather than credit or debit card if you can.
+              We don't charge processing fees, and we'd love to keep it that way. When you receive your invoice, <strong>please pay by bank account (ACH)</strong> instead of credit card.
+            </p>
+            <p className="ach-modal-message ach-modal-debit-note">
+              <strong>Planning to use a debit card?</strong> A debit card pulls from the same bank account — so choosing "Bank Account / ACH" gets you the same result and helps us avoid card processing fees.
             </p>
             {submitError && (
               <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>

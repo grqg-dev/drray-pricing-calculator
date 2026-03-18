@@ -1030,6 +1030,22 @@ body {
   cursor: not-allowed;
 }
 
+.ach-modal-debit-note {
+  background: #fef3e2;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  border-left: 3px solid var(--terracotta);
+}
+
+.info-debit-note,
+.done-debit-note {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--charcoal);
+  opacity: 0.85;
+}
+
 /* Done Page ACH Reminder */
 /* Done Page Pay Now Button */
 .done-pay-now-btn {
