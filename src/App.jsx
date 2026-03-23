@@ -391,7 +391,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
+              <p>We accept all payment methods. If you are planning to use a debit card, consider paying by bank account (ACH) instead — it pulls from the same place and helps us keep things fee-free.</p>
             </div>
             <div className="info-item">
               <strong>Need a payment plan instead?</strong>
@@ -520,7 +520,7 @@ function App() {
           <footer className="info-section">
             <div className="info-item">
               <strong>Payment Methods</strong>
-              <p>We don't pass along processing fees, and we'd love to keep it that way. <strong>Please pay by bank account (ACH)</strong> instead of credit or debit card if you can — it helps us keep things fee-free for everyone.</p>
+              <p>We accept all payment methods. If you are planning to use a debit card, consider paying by bank account (ACH) instead — it pulls from the same place and helps us keep things fee-free.</p>
             </div>
             <div className="info-item">
               <strong>How It Works</strong>
@@ -634,7 +634,7 @@ function App() {
             <div className="ach-modal-icon">🏦</div>
             <h2>One Quick Thing</h2>
             <p className="ach-modal-message">
-              We don't charge processing fees, and we'd love to keep it that way. When you receive your invoice, <strong>Please pay by bank account (ACH)</strong> rather than credit or debit card if you can.
+              If you are going to pay with a debit card, consider using bank account (ACH) instead — it helps us keep things fee-free for everyone.
             </p>
             {submitError && (
               <div className="error-message" style={{ marginTop: '12px', marginBottom: '12px' }}>
