@@ -4,7 +4,7 @@ import {
   SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
   formatDate, formatCurrency, isValidEmail, parseDueDate, getOneMonthBefore,
   getPayoffDate, getFirstInvoiceDate, parseUrlParams,
-  calculateMinDeposit, calculateDeposit, getWarnings,
+  calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
 } from './utils'
 
 // ── Sub-components ─────────────────────────────────────────
@@ -150,9 +150,10 @@ function App() {
   const SLIDING_SCALE_MAX = maxPrice || DEFAULT_SLIDING_SCALE_MAX;
   const slidingScaleMin = originalPrice || DEFAULT_MIN;
   const maxMonths = isExtended ? 12 : 9;
+  const defaultSlidingPrice = calculateDefaultSlidingPrice(slidingScaleMin, SLIDING_SCALE_MAX);
 
   // State
-  const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? slidingScaleMin : FIXED_PRICE);
+  const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? defaultSlidingPrice : FIXED_PRICE);
   const [months, setMonths] = useState(6);
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);

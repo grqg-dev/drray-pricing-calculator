@@ -75,6 +75,12 @@ export function parseUrlParams() {
 
 // ── Business logic ─────────────────────────────────────────
 
+export function calculateDefaultSlidingPrice(min, max, step = SLIDING_SCALE_STEP) {
+  const midpoint = (min + max) / 2;
+  const snapped = Math.round(midpoint / step) * step;
+  return Math.max(min, Math.min(max, snapped));
+}
+
 export function calculateMinDeposit(totalPrice, isSlidingScale) {
   const minPercent = isSlidingScale ? 0 : 0.10;
   return Math.max(MIN_DEPOSIT, Math.round(totalPrice * minPercent));

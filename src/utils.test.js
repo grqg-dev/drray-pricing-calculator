@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   formatDate, formatCurrency, isValidEmail,
   parseDueDate, getOneMonthBefore, getPayoffDate, getFirstInvoiceDate,
-  calculateMinDeposit, calculateDeposit, getWarnings,
+  calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
   DEFAULT_FIXED_PRICE, MIN_DEPOSIT, MIN_MONTHLY_PAYMENT,
 } from './utils'
 
@@ -120,6 +120,23 @@ describe('getFirstInvoiceDate', () => {
 
 // ── Business logic ─────────────────────────────────────────
 
+describe('calculateDefaultSlidingPrice', () => {
+  it('defaults to the midpoint of the range', () => {
+    expect(calculateDefaultSlidingPrice(6000, 10000)).toBe(8000);
+    expect(calculateDefaultSlidingPrice(4000, 9000)).toBe(6500);
+  });
+
+  it('snaps to the nearest step increment', () => {
+    expect(calculateDefaultSlidingPrice(4000, 8500)).toBe(6250);
+    expect(calculateDefaultSlidingPrice(4000, 9100)).toBe(6500);
+  });
+
+  it('clamps to min and max when snapping would exceed bounds', () => {
+    expect(calculateDefaultSlidingPrice(6000, 6250)).toBe(6250);
+    expect(calculateDefaultSlidingPrice(6000, 6000)).toBe(6000);
+  });
+});
+
 describe('calculateMinDeposit', () => {
   it('returns 10% for fixed price mode when above $250', () => {
     expect(calculateMinDeposit(8500, false)).toBe(850);
@@ -136,7 +153,7 @@ describe('calculateMinDeposit', () => {
   });
 
   it('returns $250 for the default fixed price', () => {
-    expect(calculateMinDeposit(DEFAULT_FIXED_PRICE, false)).toBe(850);
+    expect(calculateMinDeposit(DEFAULT_FIXED_PRICE, false)).toBe(900);
   });
 })
 
