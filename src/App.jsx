@@ -163,6 +163,7 @@ function App() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [showAchModal, setShowAchModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(isSlidingScale && !previewDone);
   const [patientName, setPatientName] = useState(previewDone ? 'Jane Doe' : '');
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
   const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null));
@@ -554,6 +555,25 @@ function App() {
             </div>
           )}
         </>
+      )}
+
+      {/* Returning-Patient Welcome Modal */}
+      {showWelcomeModal && (
+        <div className="modal-overlay">
+          <div className="modal-content ach-modal">
+            <div className="ach-modal-icon">❤️</div>
+            <h2>Welcome back</h2>
+            <p className="ach-modal-message">
+              Last time, you paid {formatCurrency(slidingScaleMin)}, and our new-patient price is now {formatCurrency(SLIDING_SCALE_MAX)}. Anywhere between the two is completely up to you — pick whatever feels right.
+            </p>
+            <button
+              className="ach-modal-confirm-btn"
+              onClick={() => setShowWelcomeModal(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Contact Modal */}
