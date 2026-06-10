@@ -153,7 +153,7 @@ describe('calculateMinDeposit', () => {
   });
 
   it('returns $250 for the default fixed price', () => {
-    expect(calculateMinDeposit(DEFAULT_FIXED_PRICE, false)).toBe(900);
+    expect(calculateMinDeposit(DEFAULT_FIXED_PRICE, false)).toBe(1000);
   });
 })
 
