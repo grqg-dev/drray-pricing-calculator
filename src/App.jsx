@@ -163,6 +163,7 @@ function App() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [showAchModal, setShowAchModal] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(!previewDone);
   const [showWelcomeModal, setShowWelcomeModal] = useState(isSlidingScale && !previewDone);
   const [patientName, setPatientName] = useState(previewDone ? 'Jane Doe' : '');
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
@@ -557,8 +558,29 @@ function App() {
         </>
       )}
 
+      {/* Intro Interstitial — shown first on load */}
+      {showIntroModal && (
+        <div className="modal-overlay">
+          <div className="modal-content ach-modal">
+            <div className="ach-modal-icon">🧭</div>
+            <h2>Explore your options</h2>
+            <p className="ach-modal-message">
+              This page is for finding a plan that works for you.
+              <br /><br />
+              Nothing is set up until you choose to submit, so take your time looking around.
+            </p>
+            <button
+              className="ach-modal-confirm-btn"
+              onClick={() => setShowIntroModal(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Returning-Patient Welcome Modal */}
-      {showWelcomeModal && (
+      {showWelcomeModal && !showIntroModal && (
         <div className="modal-overlay">
           <div className="modal-content ach-modal">
             <div className="ach-modal-icon">❤️</div>
