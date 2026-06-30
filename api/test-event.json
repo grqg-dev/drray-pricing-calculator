@@ -1,0 +1,8 @@
+{
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "origin": "https://main.dwp0zi1ev5rb9.amplifyapp.com"
+  },
+  "body": "{\"name\":\"Test Patient\",\"email\":\"test@example.com\",\"totalPrice\":8500,\"paymentOption\":\"plan\",\"deposit\":850,\"monthlyPayment\":1275,\"months\":6,\"payoffDate\":\"2026-08-04T18:18:00.000Z\",\"dueDate\":null,\"isSlidingScale\":false,\"originalPrice\":null,\"isExtended\":false,\"timestamp\":\"2026-02-04T18:18:00.000Z\",\"depositPercent\":0.1,\"customDeposit\":null}"
+}

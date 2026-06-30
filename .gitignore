@@ -31,3 +31,7 @@ amplify.yml
 .cursor/
 .shared/
 
+
+# Lambda (api/)
+api/node_modules
+api/dist

@@ -1,0 +1,19 @@
+{
+  "name": "price-submission-handler",
+  "version": "1.0.0",
+  "description": "Lambda function to handle price submissions with DynamoDB storage and make.com webhook",
+  "main": "index.js",
+  "scripts": {
+    "package": "rm -rf dist && mkdir -p dist && cp -r index.js node_modules dist && cd dist && zip -q -r function.zip .",
+    "deploy": "npm run package && aws lambda update-function-code --function-name price-submission-handler --zip-file fileb://dist/function.zip",
+    "deploy:staging": "npm run package && aws lambda update-function-code --function-name price-submission-handler-staging --zip-file fileb://dist/function.zip"
+  },
+  "keywords": ["lambda", "dynamodb", "webhook"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "aws-sdk": "^2.1691.0",
+    "stripe": "^14.0.0"
+  }
+}
