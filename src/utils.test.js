@@ -3,6 +3,7 @@ import {
   formatDate, formatCurrency, isValidEmail,
   parseDueDate, getOneMonthBefore, getPayoffDate, getFirstInvoiceDate,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
+  getMaxMonths,
   DEFAULT_FIXED_PRICE, MIN_DEPOSIT, MIN_MONTHLY_PAYMENT,
 } from './utils'
 
@@ -337,5 +338,26 @@ describe('getWarnings', () => {
       totalPrice: 8500,
     });
     expect(result.depositExceedsTotal).toBe(false);
+  });
+})
+
+// ── Max payment term ───────────────────────────────────────
+
+describe('getMaxMonths', () => {
+  it('defaults to 9 months when extended param is absent', () => {
+    expect(getMaxMonths(null)).toBe(9);
+  });
+
+  it('caps at 12 months for extended=12', () => {
+    expect(getMaxMonths('12')).toBe(12);
+  });
+
+  it('caps at 18 months for extended=true', () => {
+    expect(getMaxMonths('true')).toBe(18);
+  });
+
+  it('falls back to 9 months for an unrecognized extended value', () => {
+    expect(getMaxMonths('false')).toBe(9);
+    expect(getMaxMonths('18')).toBe(9);
   });
 })
