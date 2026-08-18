@@ -149,7 +149,7 @@ function App() {
   const FIXED_PRICE = maxPrice || DEFAULT_FIXED_PRICE;
   const SLIDING_SCALE_MAX = maxPrice || DEFAULT_SLIDING_SCALE_MAX;
   const slidingScaleMin = originalPrice || DEFAULT_MIN;
-  const maxMonths = isExtended ? 12 : 9;
+  const maxMonths = isExtended ? 18 : 9;
   const defaultSlidingPrice = calculateDefaultSlidingPrice(slidingScaleMin, SLIDING_SCALE_MAX);
 
   // State

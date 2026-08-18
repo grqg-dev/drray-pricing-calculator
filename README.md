@@ -71,7 +71,7 @@ The app auto-deploys to AWS Amplify on every push to `main`:
   - Increments: $250
 
 ### Payment Planning
-- **Payment Terms:** 1-12 months (configurable)
+- **Payment Terms:** 1-9 months (up to 18 with `extended=true`)
 - **Smart Calculations:**
   - Deposit: 10% (minimum $250)
   - Monthly payments spread evenly
@@ -98,7 +98,7 @@ https://drray-pricing.example.com/?slidingScale=true&originalPrice=5000&dueDate=
 | `slidingScale` | boolean | Enable sliding scale mode (instead of fixed $8,500) |
 | `originalPrice` | number | Set sliding scale minimum (in dollars) |
 | `dueDate` | date | Show due date & trigger warnings if payoff extends past it (YYYY-MM-DD) |
-| `extended` | boolean | Allow up to 12 months (instead of max 9) |
+| `extended` | boolean | Allow up to 18 months (instead of max 9) |
 
 **Examples:**
 - New patient: `?` (default fixed pricing)
