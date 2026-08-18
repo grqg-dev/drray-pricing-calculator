@@ -98,12 +98,13 @@ https://drray-pricing.example.com/?slidingScale=true&originalPrice=5000&dueDate=
 | `slidingScale` | boolean | Enable sliding scale mode (instead of fixed $8,500) |
 | `originalPrice` | number | Set sliding scale minimum (in dollars) |
 | `dueDate` | date | Show due date & trigger warnings if payoff extends past it (YYYY-MM-DD) |
-| `extended` | boolean | Allow up to 18 months (instead of max 9) |
+| `extended` | `true` \| `12` | `true` allows up to 18 months; `12` allows up to 12 months (default max is 9) |
 
 **Examples:**
 - New patient: `?` (default fixed pricing)
 - Returning patient: `?slidingScale=true&originalPrice=4500`
 - With deadline: `?dueDate=2026-07-15`
+- 12-month plan: `?extended=12`
 - Full custom: `?slidingScale=true&originalPrice=6000&dueDate=2026-08-30&extended=true`
 
 ## Architecture Overview

@@ -67,10 +67,22 @@ export function parseUrlParams() {
     isSlidingScale: params.get('slidingScale') === 'true',
     originalPrice: params.get('originalPrice') ? parseInt(params.get('originalPrice'), 10) : null,
     dueDate: params.get('dueDate') || null,
-    isExtended: params.get('extended') === 'true',
+    extendedParam: params.get('extended'),
     maxPrice: params.get('maxPrice') ? parseInt(params.get('maxPrice'), 10) : null,
     previewDone: params.get('preview') === 'done',
   };
+}
+
+// ── Max payment term ───────────────────────────────────────
+
+const DEFAULT_MAX_MONTHS = 9;
+const EXTENDED_MAX_MONTHS = 18;
+
+// `extended=12` caps at 12 months; `extended=true` (or any other truthy value) caps at 18.
+export function getMaxMonths(extendedParam) {
+  if (extendedParam === '12') return 12;
+  if (extendedParam === 'true') return EXTENDED_MAX_MONTHS;
+  return DEFAULT_MAX_MONTHS;
 }
 
 // ── Business logic ─────────────────────────────────────────

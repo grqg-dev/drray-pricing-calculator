@@ -104,6 +104,7 @@ All pure business logic in `src/utils.js` is tested (36 tests):
 - **`originalPrice=5000`** — Set minimum sliding scale price (default: $4,000)
 - **`dueDate=2026-06-30`** — Show due date, trigger warnings if plan extends past it
 - **`extended=true`** — Allow up to 18 months (default: 9)
+- **`extended=12`** — Allow up to 12 months (default: 9)
 - **`maxPrice=10000`** — Override default $8,500 maximum
 - **`preview=done`** — Show success screen with sample data
 

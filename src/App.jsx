@@ -3,7 +3,7 @@ import {
   DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, DEFAULT_SLIDING_SCALE_MAX,
   SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
   formatDate, formatCurrency, isValidEmail, parseDueDate, getOneMonthBefore,
-  getPayoffDate, getFirstInvoiceDate, parseUrlParams,
+  getPayoffDate, getFirstInvoiceDate, parseUrlParams, getMaxMonths,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
 } from './utils'
 
@@ -143,13 +143,14 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
 
 function App() {
   // URL configuration (read-only, parsed once per render)
-  const { isSlidingScale, originalPrice, dueDate, isExtended, maxPrice, previewDone } = parseUrlParams();
+  const { isSlidingScale, originalPrice, dueDate, extendedParam, maxPrice, previewDone } = parseUrlParams();
 
   // Derived pricing constants
   const FIXED_PRICE = maxPrice || DEFAULT_FIXED_PRICE;
   const SLIDING_SCALE_MAX = maxPrice || DEFAULT_SLIDING_SCALE_MAX;
   const slidingScaleMin = originalPrice || DEFAULT_MIN;
-  const maxMonths = isExtended ? 18 : 9;
+  const maxMonths = getMaxMonths(extendedParam);
+  const isExtended = maxMonths > 9;
   const defaultSlidingPrice = calculateDefaultSlidingPrice(slidingScaleMin, SLIDING_SCALE_MAX);
 
   // State
