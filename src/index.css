@@ -621,6 +621,10 @@ body {
   margin: 0;
 }
 
+.done-subtitle-returning {
+  line-height: 1.5;
+}
+
 .done-note {
   font-size: 12px;
   color: var(--warm-gray);

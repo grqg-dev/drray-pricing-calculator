@@ -46,7 +46,7 @@ function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, sliding
 }
 
 // Success screen shown after submission
-function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPayment, months, totalPrice }) {
+function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPayment, months, totalPrice, isSlidingScale }) {
   const firstInvoiceDate = getFirstInvoiceDate();
 
   return (
@@ -57,11 +57,14 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
             <div className="checkmark">✓</div>
             <h1>You're All Set!</h1>
           </div>
-          <p className="done-subtitle">
-            {paymentOption === 'plan'
-              ? <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
-              : <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
-            }
+          <p className={`done-subtitle${isSlidingScale ? ' done-subtitle-returning' : ''}`}>
+            {isSlidingScale ? (
+              <>We've emailed your invoice to <strong>{patientEmail}</strong>. Payment is due in 7 days. You can pay now if you'd like.</>
+            ) : paymentOption === 'plan' ? (
+              <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
+            ) : (
+              <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
+            )}
           </p>
         </div>
 
@@ -304,6 +307,7 @@ function App() {
         monthlyPayment={monthlyPayment}
         months={months}
         totalPrice={totalPrice}
+        isSlidingScale={isSlidingScale}
       />
     );
   }
