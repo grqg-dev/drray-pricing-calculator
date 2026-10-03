@@ -250,6 +250,119 @@ body {
   color: var(--warm-gray);
 }
 
+/* Schedule mode (monthly subscription vs custom invoices) */
+.schedule-mode-section {
+  margin-bottom: 4px;
+}
+
+.schedule-mode-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.schedule-mode-toggle .quick-btn {
+  flex: 1;
+}
+
+.schedule-mode-note {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warm-gray);
+}
+
+.custom-schedule-section {
+  margin-top: 4px;
+}
+
+.custom-schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.schedule-helper-btn,
+.schedule-add-btn {
+  border: none;
+  background: transparent;
+  color: var(--terracotta);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.custom-schedule-hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warm-gray);
+  margin-bottom: 10px;
+}
+
+.custom-schedule-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-schedule-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.custom-schedule-row-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warm-gray);
+  white-space: nowrap;
+}
+
+.custom-schedule-amount,
+.custom-schedule-date {
+  min-height: 44px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--cream);
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--charcoal);
+}
+
+.custom-schedule-remove {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--cream);
+  color: var(--warm-gray);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.custom-schedule-remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.custom-schedule-balance {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warm-gray);
+  text-align: center;
+}
+
+.custom-schedule-balance-error {
+  color: var(--warning-text);
+}
+
 /* Timeline Section */
 .timeline-header {
   display: flex;

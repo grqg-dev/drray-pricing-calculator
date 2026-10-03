@@ -134,7 +134,9 @@ exports.handler = async (event) => {
         stripeInvoiceId = stripeResult.invoiceId;
         console.log('[STRIPE] Deposit invoice created:', stripeInvoiceId, invoiceUrl);
 
-        // Create subscription schedule for monthly payments (plan only)
+        // Collection paths (JRDO-66):
+        // - paymentOption "plan" → Stripe subscription schedule (equal monthly invoices)
+        // - paymentOption "installment" → one scheduled Stripe invoice per custom payment (no subscription)
         let subscriptionScheduleId = null;
         let subscriptionId = null;
 

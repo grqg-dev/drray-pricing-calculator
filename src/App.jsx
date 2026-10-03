@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, DEFAULT_SLIDING_SCALE_MAX,
   SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
   formatDate, formatCurrency, isValidEmail, parseDueDate, getOneMonthBefore,
   getPayoffDate, getFirstInvoiceDate, parseUrlParams, getMaxMonths,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
+  qualifiesForCustomSchedule, suggestCustomInstallments, validateCustomSchedule,
+  toDateInputValue, getTodayLocal,
 } from './utils'
 
 // ── Sub-components ─────────────────────────────────────────
@@ -45,9 +47,114 @@ function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, sliding
   );
 }
 
+function CustomScheduleEditor({
+  installments,
+  setInstallments,
+  remainder,
+  dueDate,
+  scheduleValidation,
+  onEvenSplit,
+}) {
+  const minDate = toDateInputValue(getTodayLocal());
+
+  const updateRow = (id, field, value) => {
+    setInstallments((rows) => rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  };
+
+  const addRow = () => {
+    const lastDate = installments.length > 0
+      ? parseDueDate(installments[installments.length - 1].dueDate || minDate)
+      : getFirstInvoiceDate();
+    const nextDate = new Date(lastDate);
+    nextDate.setMonth(nextDate.getMonth() + 1);
+    setInstallments([
+      ...installments,
+      {
+        id: `installment-${Date.now()}`,
+        amount: '',
+        dueDate: toDateInputValue(nextDate),
+      },
+    ]);
+  };
+
+  const removeRow = (id) => {
+    setInstallments((rows) => rows.filter((row) => row.id !== id));
+  };
+
+  return (
+    <section className="section custom-schedule-section">
+      <div className="custom-schedule-header">
+        <span className="label">Your payment schedule</span>
+        <button type="button" className="schedule-helper-btn" onClick={onEvenSplit}>
+          Even split
+        </button>
+      </div>
+      <p className="custom-schedule-hint">
+        Add each future payment with an amount and due date. We&apos;ll send one invoice per payment on that date.
+      </p>
+      <div className="custom-schedule-rows">
+        {installments.map((row, index) => (
+          <div className="custom-schedule-row" key={row.id}>
+            <span className="custom-schedule-row-label">Payment {index + 1}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              className="custom-schedule-amount"
+              placeholder="Amount"
+              min={MIN_MONTHLY_PAYMENT}
+              value={row.amount === '' ? '' : row.amount}
+              onChange={(e) => {
+                const value = e.target.value;
+                updateRow(row.id, 'amount', value === '' ? '' : parseInt(value, 10));
+              }}
+              aria-label={`Payment ${index + 1} amount`}
+            />
+            <input
+              type="date"
+              className="custom-schedule-date"
+              min={minDate}
+              value={row.dueDate}
+              onChange={(e) => updateRow(row.id, 'dueDate', e.target.value)}
+              aria-label={`Payment ${index + 1} due date`}
+            />
+            <button
+              type="button"
+              className="custom-schedule-remove"
+              onClick={() => removeRow(row.id)}
+              disabled={installments.length <= 1}
+              aria-label={`Remove payment ${index + 1}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" className="schedule-add-btn" onClick={addRow}>
+        + Add payment
+      </button>
+      <div className={`custom-schedule-balance${scheduleValidation.remainderMismatch ? ' custom-schedule-balance-error' : ''}`}>
+        Allocated: {formatCurrency(scheduleValidation.allocated)} of {formatCurrency(remainder)} remaining
+      </div>
+    </section>
+  );
+}
+
 // Success screen shown after submission
-function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPayment, months, totalPrice, isSlidingScale }) {
+function DoneView({
+  paymentOption,
+  patientEmail,
+  invoiceUrl,
+  deposit,
+  monthlyPayment,
+  months,
+  totalPrice,
+  isSlidingScale,
+  installments,
+}) {
   const firstInvoiceDate = getFirstInvoiceDate();
+  const sortedInstallments = installments
+    ? [...installments].sort((a, b) => parseDueDate(a.dueDate) - parseDueDate(b.dueDate))
+    : [];
 
   return (
     <div className="app done-view">
@@ -60,7 +167,7 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
           <p className={`done-subtitle${isSlidingScale ? ' done-subtitle-returning' : ''}`}>
             {isSlidingScale ? (
               <>We've emailed your invoice to <strong>{patientEmail}</strong>. Payment is due in 7 days. You can pay now if you'd like.</>
-            ) : paymentOption === 'plan' ? (
+            ) : paymentOption === 'plan' || paymentOption === 'installment' ? (
               <>Your deposit invoice has been sent to <strong>{patientEmail}</strong>.</>
             ) : (
               <>We've sent an invoice to <strong>{patientEmail}</strong>.</>
@@ -75,8 +182,32 @@ function DoneView({ paymentOption, patientEmail, invoiceUrl, deposit, monthlyPay
             rel="noopener noreferrer"
             className="done-pay-now-btn"
           >
-            {paymentOption === 'plan' ? 'Pay My Deposit' : 'Pay Now'}
+            {paymentOption === 'plan' || paymentOption === 'installment' ? 'Pay My Deposit' : 'Pay Now'}
           </a>
+        )}
+
+        {paymentOption === 'installment' && sortedInstallments.length > 0 && (
+          <div className="done-timeline">
+            <div className="done-timeline-item done-timeline-now">
+              <div className="done-timeline-dot"></div>
+              <div className="done-timeline-content">
+                <span className="done-timeline-label">Now</span>
+                <span className="done-timeline-detail">Deposit invoice for {formatCurrency(deposit)}</span>
+              </div>
+            </div>
+            {sortedInstallments.map((row, index) => (
+              <div
+                key={`${row.dueDate}-${index}`}
+                className={`done-timeline-item${index === sortedInstallments.length - 1 ? ' done-timeline-last' : ''}`}
+              >
+                <div className="done-timeline-dot"></div>
+                <div className="done-timeline-content">
+                  <span className="done-timeline-label">{formatDate(parseDueDate(row.dueDate))}</span>
+                  <span className="done-timeline-detail">Invoice for {formatCurrency(row.amount)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         {paymentOption === 'plan' && (
@@ -173,6 +304,8 @@ function App() {
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
   const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null));
   const [invoiceUrl, setInvoiceUrl] = useState(previewDone ? '#' : null);
+  const [scheduleMode, setScheduleMode] = useState('monthly');
+  const [customInstallments, setCustomInstallments] = useState([]);
 
   // Derived values
   const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
@@ -181,16 +314,55 @@ function App() {
   const deposit = calculateDeposit({ customDeposit, minDepositAmount, totalPrice, depositPercent });
   const remainder = totalPrice - deposit;
   const monthlyPayment = remainder / months;
+  const canUseCustomSchedule = qualifiesForCustomSchedule(deposit, totalPrice);
+  const useCustomSchedule = scheduleMode === 'custom' && canUseCustomSchedule;
+
+  const scheduleValidation = validateCustomSchedule({
+    installments: customInstallments,
+    remainder,
+    dueDate,
+  });
 
   // Warning flags
-  const { depositBelowMin, depositBelowPercent, depositExceedsTotal, pastDueDate, belowMinPayment, hasWarning } =
-    getWarnings({ customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate });
+  const monthlyWarnings = getWarnings({
+    customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate,
+  });
+  const { depositBelowMin, depositBelowPercent, depositExceedsTotal } = monthlyWarnings;
+  const pastDueDate = useCustomSchedule ? scheduleValidation.pastDueDate : monthlyWarnings.pastDueDate;
+  const belowMinPayment = useCustomSchedule ? scheduleValidation.belowMinPayment : monthlyWarnings.belowMinPayment;
+  const hasWarning = depositBelowMin || depositBelowPercent || depositExceedsTotal
+    || (useCustomSchedule ? scheduleValidation.hasWarning : monthlyWarnings.hasWarning);
+
+  useEffect(() => {
+    if (!canUseCustomSchedule && scheduleMode === 'custom') {
+      setScheduleMode('monthly');
+    }
+  }, [canUseCustomSchedule, scheduleMode]);
+
+  useEffect(() => {
+    if (useCustomSchedule && customInstallments.length === 0) {
+      setCustomInstallments(suggestCustomInstallments({ remainder, dueDate }));
+    }
+  }, [useCustomSchedule, remainder, dueDate, customInstallments.length]);
 
   // ── Handlers ─────────────────────────────────────────────
 
   const handlePresetClick = (percent) => {
     setDepositPercent(percent);
     setCustomDeposit(null);
+  };
+
+  const switchToCustomSchedule = () => {
+    setScheduleMode('custom');
+    setCustomInstallments(suggestCustomInstallments({ remainder, dueDate }));
+  };
+
+  const handleEvenSplit = () => {
+    setCustomInstallments(suggestCustomInstallments({
+      remainder,
+      dueDate,
+      count: customInstallments.length || 3,
+    }));
   };
 
   const handleSubmit = () => {
@@ -240,22 +412,36 @@ function App() {
     setIsSubmitting(true);
     setSubmitError(null);
 
+    const submissionPaymentOption = paymentOption === 'full'
+      ? 'full'
+      : (useCustomSchedule ? 'installment' : 'plan');
+    const normalizedInstallments = useCustomSchedule
+      ? customInstallments.map(({ amount, dueDate: installmentDueDate }) => ({
+        amount: Number(amount),
+        dueDate: installmentDueDate,
+      }))
+      : null;
+    const submissionPayoffDate = paymentOption === 'full'
+      ? null
+      : (useCustomSchedule ? scheduleValidation.payoffDate : payoffDate);
+
     const payload = {
       name: patientName.trim(),
       email: patientEmail.trim(),
       totalPrice,
-      paymentOption,
+      paymentOption: submissionPaymentOption,
       deposit: paymentOption === 'full' ? totalPrice : deposit,
-      monthlyPayment: paymentOption === 'full' ? 0 : monthlyPayment,
-      months: paymentOption === 'full' ? 0 : months,
-      payoffDate: paymentOption === 'full' ? null : payoffDate.toISOString(),
+      monthlyPayment: paymentOption === 'full' || useCustomSchedule ? 0 : monthlyPayment,
+      months: paymentOption === 'full' ? 0 : (useCustomSchedule ? normalizedInstallments.length : months),
+      payoffDate: submissionPayoffDate ? submissionPayoffDate.toISOString() : null,
       dueDate: dueDate || null,
       isSlidingScale,
       originalPrice: originalPrice || null,
       isExtended,
       timestamp: new Date().toISOString(),
-      depositPercent: paymentOption === 'plan' && customDeposit === null ? depositPercent : null,
-      customDeposit: paymentOption === 'plan' && customDeposit !== null ? customDeposit : null
+      depositPercent: paymentOption !== 'full' && customDeposit === null ? depositPercent : null,
+      customDeposit: paymentOption !== 'full' && customDeposit !== null ? customDeposit : null,
+      ...(useCustomSchedule && { installments: normalizedInstallments }),
     };
 
     const bodyString = JSON.stringify(payload);
@@ -286,6 +472,9 @@ function App() {
       }
 
       setShowAchModal(false);
+      if (useCustomSchedule) {
+        setPaymentOption('installment');
+      }
       setSubmitSuccess(true);
     } catch (error) {
       console.error('Submission error:', error);
@@ -308,6 +497,7 @@ function App() {
         months={months}
         totalPrice={totalPrice}
         isSlidingScale={isSlidingScale}
+        installments={paymentOption === 'installment' ? customInstallments : null}
       />
     );
   }
@@ -424,26 +614,6 @@ function App() {
         <>
           <PriceSection {...priceSectionProps} />
 
-          {/* Timeline Section */}
-          <section className="section timeline-section">
-            <div className="timeline-header">
-              <span className="label">Pay over</span>
-              <span className="months-value">{months} {months === 1 ? 'month' : 'months'}</span>
-            </div>
-            <div className="slider-wrapper">
-              <input
-                type="range"
-                min="1"
-                max={maxMonths}
-                value={months}
-                onChange={(e) => setMonths(parseInt(e.target.value, 10))}
-                className="slider"
-                aria-label="Select payment duration"
-                style={{ '--progress': `${((months - 1) / (maxMonths - 1)) * 100}%` }}
-              />
-            </div>
-          </section>
-
           {/* Deposit Section */}
           <div className="deposit-section">
             <span className="label">Deposit</span>
@@ -481,16 +651,82 @@ function App() {
             </div>
           </div>
 
+          {canUseCustomSchedule && (
+            <section className="section schedule-mode-section">
+              <div className="label" style={{ marginBottom: '10px' }}>Payment schedule</div>
+              <div className="schedule-mode-toggle">
+                <button
+                  type="button"
+                  className={`quick-btn ${scheduleMode === 'monthly' ? 'active' : ''}`}
+                  onClick={() => setScheduleMode('monthly')}
+                >
+                  Equal monthly
+                </button>
+                <button
+                  type="button"
+                  className={`quick-btn ${scheduleMode === 'custom' ? 'active' : ''}`}
+                  onClick={switchToCustomSchedule}
+                >
+                  Custom dates
+                </button>
+              </div>
+              {scheduleMode === 'custom' && (
+                <p className="schedule-mode-note">
+                  With a deposit of 25% or more, you can set your own payment dates. Each payment is invoiced separately (not a monthly subscription).
+                </p>
+              )}
+            </section>
+          )}
+
+          {!useCustomSchedule && (
+            <section className="section timeline-section">
+              <div className="timeline-header">
+                <span className="label">Pay over</span>
+                <span className="months-value">{months} {months === 1 ? 'month' : 'months'}</span>
+              </div>
+              <div className="slider-wrapper">
+                <input
+                  type="range"
+                  min="1"
+                  max={maxMonths}
+                  value={months}
+                  onChange={(e) => setMonths(parseInt(e.target.value, 10))}
+                  className="slider"
+                  aria-label="Select payment duration"
+                  style={{ '--progress': `${((months - 1) / (maxMonths - 1)) * 100}%` }}
+                />
+              </div>
+            </section>
+          )}
+
+          {useCustomSchedule && (
+            <CustomScheduleEditor
+              installments={customInstallments}
+              setInstallments={setCustomInstallments}
+              remainder={remainder}
+              dueDate={dueDate}
+              scheduleValidation={scheduleValidation}
+              onEvenSplit={handleEvenSplit}
+            />
+          )}
+
           {/* Summary Cards */}
           <div className="summary-cards">
             <div className="summary-card">
               <span className="card-label">Deposit Today</span>
               <span className="card-amount">{formatCurrency(deposit)}</span>
             </div>
-            <div className="summary-card">
-              <span className="card-label">{months}× Monthly</span>
-              <span className="card-amount">{formatCurrency(monthlyPayment)}</span>
-            </div>
+            {useCustomSchedule ? (
+              <div className="summary-card">
+                <span className="card-label">{customInstallments.length} Payments</span>
+                <span className="card-amount">{formatCurrency(remainder)}</span>
+              </div>
+            ) : (
+              <div className="summary-card">
+                <span className="card-label">{months}× Monthly</span>
+                <span className="card-amount">{formatCurrency(monthlyPayment)}</span>
+              </div>
+            )}
           </div>
 
           {/* Warnings */}
@@ -498,12 +734,31 @@ function App() {
             <div className="warnings">
               {pastDueDate && (
                 <div className="warning">
-                  This plan extends past your due date—adjust months to finish earlier.
+                  {useCustomSchedule
+                    ? 'Your last payment is after your due date—move dates earlier or adjust amounts.'
+                    : 'This plan extends past your due date—adjust months to finish earlier.'}
+                </div>
+              )}
+              {useCustomSchedule && scheduleValidation.remainderMismatch && (
+                <div className="warning">
+                  Scheduled payments must add up to {formatCurrency(remainder)} (currently {formatCurrency(scheduleValidation.allocated)}).
+                </div>
+              )}
+              {useCustomSchedule && scheduleValidation.incompleteRows && (
+                <div className="warning">
+                  Enter an amount and due date for each payment in your schedule.
+                </div>
+              )}
+              {useCustomSchedule && scheduleValidation.invalidDates && (
+                <div className="warning">
+                  Each payment date must be today or later.
                 </div>
               )}
               {belowMinPayment && (
                 <div className="warning">
-                  The minimum payment is {formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.
+                  {useCustomSchedule
+                    ? `Each payment must be at least ${formatCurrency(MIN_MONTHLY_PAYMENT)}.`
+                    : `The minimum payment is ${formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.`}
                 </div>
               )}
               {depositBelowMin && (
@@ -532,12 +787,21 @@ function App() {
             </div>
             <div className="info-item">
               <strong>How It Works</strong>
-              <p>After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that{payByDateText}.</p>
+              <p>
+                {useCustomSchedule
+                  ? `After you submit, we'll send your deposit invoice right away. Each scheduled payment gets its own invoice on the date you chose${payByDateText}.`
+                  : `After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that${payByDateText}.`}
+              </p>
             </div>
-            <div className="info-item">
-              <strong>Need more flexibility?</strong>
-              <p>Monthly payments are just our default — we can adjust the schedule or payoff date to fit your situation. <button className="contact-link" onClick={() => setShowContactModal(true)}>Contact us</button></p>
-            </div>
+            {!canUseCustomSchedule && (
+              <div className="info-item">
+                <strong>Need more flexibility?</strong>
+                <p>
+                  Put down 25% or more to build a custom payment schedule, or{' '}
+                  <button className="contact-link" onClick={() => setShowContactModal(true)}>contact us</button>.
+                </p>
+              </div>
+            )}
             <div className="info-item">
               <strong>Want to pay in full instead?</strong>
               <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to full payment</button></p>
