@@ -110,15 +110,15 @@ function CustomScheduleEditor({
             <label className="custom-schedule-field">
               <span>Amount</span>
               <input
-                type="number"
+                type="text"
                 inputMode="numeric"
+                pattern="[0-9]*"
                 className="custom-schedule-amount"
                 placeholder="0"
-                min={MIN_MONTHLY_PAYMENT}
                 value={row.amount === '' ? '' : row.amount}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  updateRow(row.id, 'amount', value === '' ? '' : parseInt(value, 10));
+                  const digits = e.target.value.replace(/\D/g, '');
+                  updateRow(row.id, 'amount', digits === '' ? '' : parseInt(digits, 10));
                 }}
                 aria-label={`Payment ${index + 1} amount`}
               />
@@ -636,23 +636,20 @@ function App() {
                 </button>
               ))}
               <input
-                type="number"
+                type="text"
                 inputMode="numeric"
+                pattern="[0-9]*"
                 className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
                 placeholder="Custom"
-                min={minDepositAmount}
                 value={customDeposit !== null ? customDeposit : ''}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || value === null) {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  if (digits === '') {
                     setCustomDeposit(null);
                     setDepositPercent(0.10);
                   } else {
-                    const num = parseInt(value, 10);
-                    if (!isNaN(num)) {
-                      setCustomDeposit(num);
-                      setDepositPercent(null);
-                    }
+                    setCustomDeposit(parseInt(digits, 10));
+                    setDepositPercent(null);
                   }
                 }}
               />
