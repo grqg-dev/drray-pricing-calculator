@@ -49,8 +49,10 @@ body {
 /* Header */
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
+  gap: 4px 12px;
   margin-bottom: 4px;
   flex-shrink: 0;
 }
@@ -74,7 +76,8 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-align: right;
-  white-space: nowrap;
+  margin-left: auto;
+  max-width: 100%;
 }
 
 /* Sections */
@@ -248,6 +251,147 @@ body {
   margin-top: 6px;
   font-size: 11px;
   color: var(--warm-gray);
+}
+
+/* Schedule mode (monthly subscription vs custom invoices) */
+.schedule-mode-section {
+  margin-bottom: 4px;
+}
+
+.schedule-mode-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.schedule-mode-toggle .quick-btn {
+  flex: 1;
+}
+
+.schedule-mode-note {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warm-gray);
+}
+
+.custom-schedule-section {
+  margin-top: 4px;
+}
+
+.custom-schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.schedule-helper-btn,
+.schedule-add-btn {
+  border: none;
+  background: transparent;
+  color: var(--terracotta);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.custom-schedule-hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warm-gray);
+  margin-bottom: 10px;
+}
+
+.custom-schedule-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.custom-schedule-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--cream);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.custom-schedule-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-schedule-row-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.custom-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.custom-schedule-field span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warm-gray);
+}
+
+.custom-schedule-amount,
+.custom-schedule-date {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: white;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--charcoal);
+}
+
+.custom-schedule-remove {
+  border: none;
+  background: transparent;
+  color: var(--terracotta);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.custom-schedule-remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.custom-schedule-balance {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warm-gray);
+  text-align: center;
+}
+
+.custom-schedule-balance-error {
+  color: var(--warning-text);
 }
 
 /* Timeline Section */

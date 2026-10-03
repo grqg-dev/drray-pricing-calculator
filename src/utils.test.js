@@ -3,8 +3,9 @@ import {
   formatDate, formatCurrency, isValidEmail,
   parseDueDate, getOneMonthBefore, getPayoffDate, getFirstInvoiceDate,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
-  getMaxMonths,
-  DEFAULT_FIXED_PRICE, MIN_DEPOSIT, MIN_MONTHLY_PAYMENT,
+  getMaxMonths, qualifiesForCustomSchedule, distributeInstallmentAmounts,
+  suggestCustomInstallments, validateCustomSchedule, sumInstallmentAmounts,
+  DEFAULT_FIXED_PRICE, MIN_DEPOSIT, MIN_MONTHLY_PAYMENT, CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION,
 } from './utils'
 
 // ── Formatting ─────────────────────────────────────────────
@@ -342,6 +343,89 @@ describe('getWarnings', () => {
 })
 
 // ── Max payment term ───────────────────────────────────────
+
+describe('qualifiesForCustomSchedule', () => {
+  it('qualifies at exactly 25%', () => {
+    expect(qualifiesForCustomSchedule(2500, 10000)).toBe(true);
+  });
+
+  it('does not qualify below 25%', () => {
+    expect(qualifiesForCustomSchedule(2499, 10000)).toBe(false);
+    expect(qualifiesForCustomSchedule(850, 8500)).toBe(false);
+  });
+});
+
+describe('distributeInstallmentAmounts', () => {
+  it('splits remainder into whole dollars that sum to remainder', () => {
+    expect(distributeInstallmentAmounts(5000, 3)).toEqual([1666, 1667, 1667]);
+    expect(distributeInstallmentAmounts(100, 3).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+});
+
+describe('validateCustomSchedule', () => {
+  const remainder = 6000;
+  const validInstallments = [
+    { id: 'a', amount: 3000, dueDate: '2026-08-01' },
+    { id: 'b', amount: 3000, dueDate: '2026-09-01' },
+  ];
+
+  it('accepts a schedule that sums to remainder and is before due date', () => {
+    const result = validateCustomSchedule({
+      installments: validInstallments,
+      remainder,
+      dueDate: '2026-10-01',
+      today: new Date(2026, 0, 1),
+    });
+    expect(result.hasWarning).toBe(false);
+    expect(result.remainderMismatch).toBe(false);
+  });
+
+  it('warns when amounts do not sum to remainder', () => {
+    const result = validateCustomSchedule({
+      installments: [{ id: 'a', amount: 2000, dueDate: '2026-08-01' }],
+      remainder,
+      dueDate: null,
+      today: new Date(2026, 0, 1),
+    });
+    expect(result.remainderMismatch).toBe(true);
+    expect(result.hasWarning).toBe(true);
+  });
+
+  it('warns when last payment is after due date', () => {
+    const result = validateCustomSchedule({
+      installments: validInstallments,
+      remainder,
+      dueDate: '2026-08-15',
+      today: new Date(2026, 0, 1),
+    });
+    expect(result.pastDueDate).toBe(true);
+  });
+
+  it('warns when a payment is below minimum', () => {
+    const result = validateCustomSchedule({
+      installments: [
+        { id: 'a', amount: 200, dueDate: '2026-08-01' },
+        { id: 'b', amount: 5800, dueDate: '2026-09-01' },
+      ],
+      remainder: 6000,
+      dueDate: null,
+      today: new Date(2026, 0, 1),
+    });
+    expect(result.belowMinPayment).toBe(true);
+  });
+});
+
+describe('suggestCustomInstallments', () => {
+  it('returns installments that sum to the remainder', () => {
+    const rows = suggestCustomInstallments({ remainder: 7500, dueDate: '2027-01-01' });
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    expect(sumInstallmentAmounts(rows)).toBe(7500);
+    rows.forEach((row) => {
+      expect(row.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(row.amount).toBeGreaterThanOrEqual(MIN_MONTHLY_PAYMENT);
+    });
+  });
+});
 
 describe('getMaxMonths', () => {
   it('defaults to 9 months when extended param is absent', () => {

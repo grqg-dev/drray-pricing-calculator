@@ -7,6 +7,8 @@ export const DEFAULT_SLIDING_SCALE_MAX = 10000;
 export const SLIDING_SCALE_STEP = 250;
 export const DEFAULT_MIN = 4000;
 export const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
+/** Deposits at or above this fraction of package price unlock custom (non-subscription) schedules */
+export const CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION = 0.25;
 export const SUBMISSION_API_URL = import.meta.env.VITE_SUBMISSION_API_URL || 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
 
 // ── Formatting ─────────────────────────────────────────────
@@ -59,6 +61,19 @@ export function getFirstInvoiceDate() {
   return d;
 }
 
+export function getTodayLocal() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function toDateInputValue(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ── URL parameters ─────────────────────────────────────────
 
 export function parseUrlParams() {
@@ -103,6 +118,93 @@ export function calculateDeposit({ customDeposit, minDepositAmount, totalPrice, 
     return Math.max(minDepositAmount, Math.min(customDeposit, totalPrice));
   }
   return Math.max(minDepositAmount, Math.round(totalPrice * depositPercent));
+}
+
+export function qualifiesForCustomSchedule(deposit, totalPrice) {
+  return deposit >= Math.round(totalPrice * CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION);
+}
+
+export function sumInstallmentAmounts(installments) {
+  return installments.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+}
+
+export function getCustomSchedulePayoffDate(installments) {
+  let latest = null;
+  for (const row of installments) {
+    if (!row.dueDate) continue;
+    const d = parseDueDate(row.dueDate);
+    if (!latest || d > latest) latest = d;
+  }
+  return latest;
+}
+
+export function distributeInstallmentAmounts(remainder, count) {
+  const n = Math.max(1, count);
+  const base = Math.floor(remainder / n);
+  const amounts = Array(n).fill(base);
+  let leftover = remainder - base * n;
+  for (let i = n - 1; i >= 0 && leftover > 0; i--) {
+    amounts[i] += 1;
+    leftover -= 1;
+  }
+  return amounts;
+}
+
+/**
+ * Seed a custom schedule between first invoice date (~30 days) and due date (or default payoff).
+ */
+export function suggestCustomInstallments({ remainder, dueDate, count = 3 }) {
+  const start = getFirstInvoiceDate();
+  const end = dueDate ? parseDueDate(dueDate) : getPayoffDate(6);
+  const maxByMinPayment = Math.max(1, Math.floor(remainder / MIN_MONTHLY_PAYMENT));
+  const paymentCount = Math.max(2, Math.min(count, maxByMinPayment, 8));
+  const amounts = distributeInstallmentAmounts(remainder, paymentCount);
+  const startMs = start.getTime();
+  const endMs = Math.max(end.getTime(), startMs);
+  const span = endMs - startMs;
+
+  const dates = amounts.map((_, i) => {
+    const t = paymentCount === 1 ? startMs : startMs + (span * i) / (paymentCount - 1);
+    return toDateInputValue(new Date(t));
+  });
+
+  return amounts.map((amount, i) => ({
+    id: `installment-${i}`,
+    amount,
+    dueDate: dates[i],
+  }));
+}
+
+export function validateCustomSchedule({ installments, remainder, dueDate, today = getTodayLocal() }) {
+  const incompleteRows = installments.length === 0 || installments.some(
+    (row) => row.dueDate === '' || row.amount === '' || row.amount === null || row.amount === undefined
+      || Number.isNaN(Number(row.amount)) || Number(row.amount) <= 0,
+  );
+  const allocated = sumInstallmentAmounts(installments);
+  const remainderMismatch = !incompleteRows && allocated !== remainder;
+  const belowMinPayment = installments.some((row) => {
+    const amt = Number(row.amount);
+    return !Number.isNaN(amt) && amt > 0 && amt < MIN_MONTHLY_PAYMENT;
+  });
+  const invalidDates = installments.some((row) => {
+    if (!row.dueDate) return false;
+    return parseDueDate(row.dueDate) < today;
+  });
+  const payoffDate = getCustomSchedulePayoffDate(installments);
+  const pastDueDate = !!(dueDate && payoffDate && payoffDate > parseDueDate(dueDate));
+
+  const hasWarning = incompleteRows || remainderMismatch || belowMinPayment || invalidDates || pastDueDate;
+
+  return {
+    incompleteRows,
+    remainderMismatch,
+    belowMinPayment,
+    invalidDates,
+    pastDueDate,
+    allocated,
+    payoffDate,
+    hasWarning,
+  };
 }
 
 export function getWarnings({ customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate }) {
