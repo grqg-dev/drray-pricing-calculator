@@ -49,8 +49,10 @@ body {
 /* Header */
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
+  gap: 4px 12px;
   margin-bottom: 4px;
   flex-shrink: 0;
 }
@@ -74,7 +76,8 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-align: right;
-  white-space: nowrap;
+  margin-left: auto;
+  max-width: 100%;
 }
 
 /* Sections */
@@ -305,45 +308,73 @@ body {
 .custom-schedule-rows {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .custom-schedule-row {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--cream);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.custom-schedule-row-top {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .custom-schedule-row-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--charcoal);
+}
+
+.custom-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.custom-schedule-field span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--warm-gray);
-  white-space: nowrap;
 }
 
 .custom-schedule-amount,
 .custom-schedule-date {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 44px;
-  padding: 10px 8px;
+  padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.12);
-  background: var(--cream);
+  background: white;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--charcoal);
 }
 
 .custom-schedule-remove {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: var(--cream);
-  color: var(--warm-gray);
-  font-size: 20px;
-  line-height: 1;
+  border: none;
+  background: transparent;
+  color: var(--terracotta);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  padding: 4px 0;
 }
 
 .custom-schedule-remove:disabled {

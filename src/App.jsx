@@ -90,42 +90,50 @@ function CustomScheduleEditor({
         </button>
       </div>
       <p className="custom-schedule-hint">
-        Add each future payment with an amount and due date. We&apos;ll send one invoice per payment on that date.
+        These payments cover the balance after your deposit. Each one is invoiced on its due date.
       </p>
       <div className="custom-schedule-rows">
         {installments.map((row, index) => (
           <div className="custom-schedule-row" key={row.id}>
-            <span className="custom-schedule-row-label">Payment {index + 1}</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              className="custom-schedule-amount"
-              placeholder="Amount"
-              min={MIN_MONTHLY_PAYMENT}
-              value={row.amount === '' ? '' : row.amount}
-              onChange={(e) => {
-                const value = e.target.value;
-                updateRow(row.id, 'amount', value === '' ? '' : parseInt(value, 10));
-              }}
-              aria-label={`Payment ${index + 1} amount`}
-            />
-            <input
-              type="date"
-              className="custom-schedule-date"
-              min={minDate}
-              value={row.dueDate}
-              onChange={(e) => updateRow(row.id, 'dueDate', e.target.value)}
-              aria-label={`Payment ${index + 1} due date`}
-            />
-            <button
-              type="button"
-              className="custom-schedule-remove"
-              onClick={() => removeRow(row.id)}
-              disabled={installments.length <= 1}
-              aria-label={`Remove payment ${index + 1}`}
-            >
-              ×
-            </button>
+            <div className="custom-schedule-row-top">
+              <span className="custom-schedule-row-label">Payment {index + 1}</span>
+              <button
+                type="button"
+                className="custom-schedule-remove"
+                onClick={() => removeRow(row.id)}
+                disabled={installments.length <= 1}
+                aria-label={`Remove payment ${index + 1}`}
+              >
+                Remove
+              </button>
+            </div>
+            <label className="custom-schedule-field">
+              <span>Amount</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                className="custom-schedule-amount"
+                placeholder="0"
+                min={MIN_MONTHLY_PAYMENT}
+                value={row.amount === '' ? '' : row.amount}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  updateRow(row.id, 'amount', value === '' ? '' : parseInt(value, 10));
+                }}
+                aria-label={`Payment ${index + 1} amount`}
+              />
+            </label>
+            <label className="custom-schedule-field">
+              <span>Due date</span>
+              <input
+                type="date"
+                className="custom-schedule-date"
+                min={minDate}
+                value={row.dueDate}
+                onChange={(e) => updateRow(row.id, 'dueDate', e.target.value)}
+                aria-label={`Payment ${index + 1} due date`}
+              />
+            </label>
           </div>
         ))}
       </div>
@@ -672,7 +680,7 @@ function App() {
               </div>
               {scheduleMode === 'custom' && (
                 <p className="schedule-mode-note">
-                  With a deposit of 25% or more, you can set your own payment dates. Each payment is invoiced separately (not a monthly subscription).
+                  Set your own dates. Each payment is its own invoice, not a monthly subscription.
                 </p>
               )}
             </section>
