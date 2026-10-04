@@ -6,7 +6,7 @@ import {
   getPayoffDate, getFirstInvoiceDate, parseUrlParams, getMaxMonths,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
   qualifiesForCustomSchedule, suggestCustomInstallments, validateCustomSchedule,
-  toDateInputValue, getTodayLocal, formatAmountInput, parseAmountInput,
+  toDateInputValue, getEarliestPaymentDate, formatAmountInput, parseAmountInput,
   PAYMENT_INTERVALS, getMaxIntervalPayments, buildIntervalInstallments,
 } from './utils'
 
@@ -173,7 +173,8 @@ function CustomScheduleEditor({
   onEvenSplit,
   onBackToEqual,
 }) {
-  const minDate = toDateInputValue(getTodayLocal());
+  // Invoices go out 15 days before each due date, so nothing can be due sooner
+  const minDate = toDateInputValue(getEarliestPaymentDate());
 
   const updateRow = (id, field, value) => {
     setInstallments((rows) => rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
@@ -208,7 +209,7 @@ function CustomScheduleEditor({
         </button>
       </div>
       <p className="custom-schedule-hint">
-        These payments cover the balance after your deposit. Each one is invoiced on its due date.
+        These payments cover what's left after your deposit. We'll email you each invoice 15 days before it's due.
       </p>
       <div className="custom-schedule-rows">
         {installments.map((row, index) => (
@@ -323,8 +324,8 @@ function DoneView({
               >
                 <div className="done-timeline-dot"></div>
                 <div className="done-timeline-content">
-                  <span className="done-timeline-label">{formatDate(parseDueDate(row.dueDate))}</span>
-                  <span className="done-timeline-detail">Invoice for {formatCurrency(row.amount)}</span>
+                  <span className="done-timeline-label">Due {formatDate(parseDueDate(row.dueDate))}</span>
+                  <span className="done-timeline-detail">{formatCurrency(row.amount)}. We'll email the invoice 15 days before.</span>
                 </div>
               </div>
             ))}
@@ -674,7 +675,7 @@ function App() {
 
   // "Pay by" date text for the info section (1 month before due date)
   const payByDateText = dueDate
-    ? `. We typically ask that your balance be paid off by ${formatDate(getOneMonthBefore(parseDueDate(dueDate)))}`
+    ? ` Plan to finish paying by ${formatDate(getOneMonthBefore(parseDueDate(dueDate)))}.`
     : '';
 
   return (
@@ -889,7 +890,7 @@ function App() {
               )}
               {useCustomSchedule && scheduleValidation.invalidDates && (
                 <div className="warning">
-                  Each payment date must be today or later.
+                  Pick due dates at least 15 days from today. We email each invoice 15 days before it's due.
                 </div>
               )}
               {belowMinPayment && (
@@ -927,10 +928,10 @@ function App() {
               <strong>How It Works</strong>
               <p>
                 {useCustomSchedule
-                  ? `After you submit, we'll send your deposit invoice right away. Each scheduled payment gets its own invoice on the date you chose${payByDateText}.`
+                  ? `When you submit, we'll email your deposit invoice. You'll get an invoice for each payment 15 days before the due date you picked.${payByDateText}`
                   : useIntervalSchedule
-                  ? `After you submit, we'll send your deposit invoice right away. Your first payment invoice arrives about 30 days later, then one every ${intervalMonths} months${payByDateText}.`
-                  : `After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that${payByDateText}.`}
+                  ? `When you submit, we'll email your deposit invoice. Your first payment is due in about 30 days, then every ${intervalMonths} months after that. You'll get each invoice 15 days before it's due.${payByDateText}`
+                  : `After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that.${payByDateText}`}
               </p>
             </div>
             {!canUseCustomSchedule && (

@@ -402,6 +402,32 @@ describe('validateCustomSchedule', () => {
     expect(result.pastDueDate).toBe(true);
   });
 
+  it('warns when a payment is due less than 15 days from today', () => {
+    const result = validateCustomSchedule({
+      installments: [
+        { id: 'a', amount: 3000, dueDate: '2026-01-15' },
+        { id: 'b', amount: 3000, dueDate: '2026-02-01' },
+      ],
+      remainder,
+      dueDate: null,
+      today: new Date(2026, 0, 1),
+    });
+    expect(result.invalidDates).toBe(true);
+  });
+
+  it('accepts a payment due exactly 15 days from today', () => {
+    const result = validateCustomSchedule({
+      installments: [
+        { id: 'a', amount: 3000, dueDate: '2026-01-16' },
+        { id: 'b', amount: 3000, dueDate: '2026-02-01' },
+      ],
+      remainder,
+      dueDate: null,
+      today: new Date(2026, 0, 1),
+    });
+    expect(result.invalidDates).toBe(false);
+  });
+
   it('warns when a payment is below minimum', () => {
     const result = validateCustomSchedule({
       installments: [

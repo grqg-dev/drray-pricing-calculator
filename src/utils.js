@@ -11,6 +11,8 @@ export const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
 export const CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION = 0.50;
 /** Months between equal payments offered once the deposit unlocks flexible schedules */
 export const PAYMENT_INTERVALS = [1, 2, 3];
+/** Installment invoices are emailed this many days before each due date (api INSTALLMENT_DAYS_UNTIL_DUE) */
+export const INVOICE_LEAD_DAYS = 15;
 export const SUBMISSION_API_URL = import.meta.env.VITE_SUBMISSION_API_URL || 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
 
 // ── Formatting ─────────────────────────────────────────────
@@ -78,6 +80,13 @@ export function getFirstInvoiceDate() {
 export function getTodayLocal() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// Earliest due date a payment can have: its invoice goes out INVOICE_LEAD_DAYS before
+export function getEarliestPaymentDate(today = getTodayLocal()) {
+  const d = new Date(today);
+  d.setDate(d.getDate() + INVOICE_LEAD_DAYS);
   return d;
 }
 
@@ -233,9 +242,10 @@ export function validateCustomSchedule({ installments, remainder, dueDate, today
     const amt = Number(row.amount);
     return !Number.isNaN(amt) && amt > 0 && amt < MIN_MONTHLY_PAYMENT;
   });
+  const earliest = getEarliestPaymentDate(today);
   const invalidDates = installments.some((row) => {
     if (!row.dueDate) return false;
-    return parseDueDate(row.dueDate) < today;
+    return parseDueDate(row.dueDate) < earliest;
   });
   const payoffDate = getCustomSchedulePayoffDate(installments);
   const pastDueDate = !!(dueDate && payoffDate && payoffDate > parseDueDate(dueDate));
