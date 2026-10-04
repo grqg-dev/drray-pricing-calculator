@@ -3,7 +3,8 @@ import {
   formatDate, formatCurrency, isValidEmail,
   parseDueDate, getOneMonthBefore, getPayoffDate, getFirstInvoiceDate,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
-  getMaxMonths, qualifiesForCustomSchedule, distributeInstallmentAmounts,
+  getMaxMonths, qualifiesForCustomSchedule, formatAmountInput, parseAmountInput,
+  addMonths, getMaxIntervalPayments, buildIntervalInstallments, distributeInstallmentAmounts,
   suggestCustomInstallments, validateCustomSchedule, sumInstallmentAmounts,
   DEFAULT_FIXED_PRICE, MIN_DEPOSIT, MIN_MONTHLY_PAYMENT, CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION,
 } from './utils'
@@ -345,13 +346,13 @@ describe('getWarnings', () => {
 // ── Max payment term ───────────────────────────────────────
 
 describe('qualifiesForCustomSchedule', () => {
-  it('qualifies at exactly 25%', () => {
-    expect(qualifiesForCustomSchedule(2500, 10000)).toBe(true);
+  it('qualifies at exactly 50%', () => {
+    expect(qualifiesForCustomSchedule(5000, 10000)).toBe(true);
   });
 
-  it('does not qualify below 25%', () => {
-    expect(qualifiesForCustomSchedule(2499, 10000)).toBe(false);
-    expect(qualifiesForCustomSchedule(850, 8500)).toBe(false);
+  it('does not qualify below 50%', () => {
+    expect(qualifiesForCustomSchedule(4999, 10000)).toBe(false);
+    expect(qualifiesForCustomSchedule(2500, 10000)).toBe(false);
   });
 });
 
@@ -445,3 +446,77 @@ describe('getMaxMonths', () => {
     expect(getMaxMonths('18')).toBe(9);
   });
 })
+
+describe('formatAmountInput', () => {
+  it('adds thousands separators', () => {
+    expect(formatAmountInput(2500)).toBe('2,500');
+    expect(formatAmountInput(10000)).toBe('10,000');
+    expect(formatAmountInput(250)).toBe('250');
+  });
+
+  it('keeps empty values empty', () => {
+    expect(formatAmountInput('')).toBe('');
+    expect(formatAmountInput(null)).toBe('');
+  });
+})
+
+describe('parseAmountInput', () => {
+  it('reads formatted text back to whole dollars', () => {
+    expect(parseAmountInput('2,500')).toBe(2500);
+    expect(parseAmountInput('$10,000')).toBe(10000);
+  });
+
+  it('returns empty string when there are no digits', () => {
+    expect(parseAmountInput('')).toBe('');
+    expect(parseAmountInput('$,')).toBe('');
+  });
+})
+
+describe('addMonths', () => {
+  it('adds months on an ordinary day', () => {
+    expect(addMonths(new Date(2026, 10, 2), 2)).toEqual(new Date(2027, 0, 2));
+  });
+
+  it('clamps to the last day of a shorter month', () => {
+    expect(addMonths(new Date(2027, 0, 31), 1)).toEqual(new Date(2027, 1, 28));
+    expect(addMonths(new Date(2026, 7, 31), 3)).toEqual(new Date(2026, 10, 30));
+  });
+})
+
+describe('getMaxIntervalPayments', () => {
+  it('fits payments inside the default 9-month term', () => {
+    expect(getMaxIntervalPayments({ intervalMonths: 1, maxMonths: 9, remainder: 7500 })).toBe(9);
+    expect(getMaxIntervalPayments({ intervalMonths: 2, maxMonths: 9, remainder: 7500 })).toBe(5);
+    expect(getMaxIntervalPayments({ intervalMonths: 3, maxMonths: 9, remainder: 7500 })).toBe(3);
+  });
+
+  it('allows more payments on an extended term', () => {
+    expect(getMaxIntervalPayments({ intervalMonths: 2, maxMonths: 18, remainder: 7500 })).toBe(9);
+  });
+
+  it('caps the count so each payment meets the minimum', () => {
+    expect(getMaxIntervalPayments({ intervalMonths: 1, maxMonths: 9, remainder: 1000 })).toBe(4);
+  });
+
+  it('always allows at least one payment', () => {
+    expect(getMaxIntervalPayments({ intervalMonths: 2, maxMonths: 9, remainder: 100 })).toBe(1);
+  });
+})
+
+describe('buildIntervalInstallments', () => {
+  it('spaces equal payments the given number of months apart', () => {
+    const rows = buildIntervalInstallments({
+      remainder: 7500, count: 3, intervalMonths: 2, start: new Date(2026, 10, 2),
+    });
+    expect(rows.map((r) => r.dueDate)).toEqual(['2026-11-02', '2027-01-02', '2027-03-02']);
+    expect(rows.map((r) => r.amount)).toEqual([2500, 2500, 2500]);
+  });
+
+  it('sums to the remainder when it does not divide evenly', () => {
+    const rows = buildIntervalInstallments({
+      remainder: 7000, count: 3, intervalMonths: 3, start: new Date(2026, 10, 2),
+    });
+    expect(sumInstallmentAmounts(rows)).toBe(7000);
+  });
+})
+

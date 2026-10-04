@@ -77,6 +77,15 @@ SUBMISSION_API_URL           // AWS Lambda webhook endpoint
 4. If `paymentOption === 'plan'` → `<PriceSection />` + timeline + deposit + summary + warnings + submit
 5. Modals at bottom (Contact, Name Entry, ACH confirmation)
 
+## Payment Schedules
+
+- **Deposit under 50%:** equal monthly payments only ("Pay over N months" slider). Submits as `paymentOption: 'plan'` (Stripe subscription).
+- **Deposit 50% or more** (`CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION`): `SchedulePlanCards` offers Monthly, Every 2 months, Every 3 months (`PAYMENT_INTERVALS`), each priced up front, plus "Choose my own dates".
+  - Monthly still submits as `'plan'` (subscription).
+  - Every 2/3 months and custom dates submit as `paymentOption: 'installment'` with an `installments` array (one scheduled Stripe invoice per payment). Rows come from `buildIntervalInstallments`; the count is capped by `getMaxIntervalPayments` (plan term and $250 minimum).
+  - "Choose my own dates" opens `CustomScheduleEditor` pre-filled with the equal schedule on screen.
+- Amount fields use `AmountInput`, which shows `$2,500` while typing and reports whole dollars (`formatAmountInput` / `parseAmountInput`).
+
 ## Testing
 
 ### Running Tests

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, DEFAULT_SLIDING_SCALE_MAX,
   SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
@@ -6,10 +6,127 @@ import {
   getPayoffDate, getFirstInvoiceDate, parseUrlParams, getMaxMonths,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
   qualifiesForCustomSchedule, suggestCustomInstallments, validateCustomSchedule,
-  toDateInputValue, getTodayLocal,
+  toDateInputValue, getTodayLocal, formatAmountInput, parseAmountInput,
+  PAYMENT_INTERVALS, getMaxIntervalPayments, buildIntervalInstallments,
 } from './utils'
 
 // ── Sub-components ─────────────────────────────────────────
+
+// Whole-dollar text field that shows "$2,500" while typing and reports 2500 (or '' when empty).
+// Keeps the caret after the same digit when commas are inserted or removed.
+function AmountInput({ value, onChange, ...rest }) {
+  const inputRef = useRef(null);
+  const caretDigits = useRef(null);
+
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (caretDigits.current === null || !el || document.activeElement !== el) return;
+    let pos = 0;
+    let seen = 0;
+    while (pos < el.value.length && seen < caretDigits.current) {
+      if (/\d/.test(el.value[pos])) seen++;
+      pos++;
+    }
+    el.setSelectionRange(pos, pos);
+    caretDigits.current = null;
+  });
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      value={value === '' || value === null ? '' : `$${formatAmountInput(value)}`}
+      onChange={(e) => {
+        const el = e.target;
+        const caret = el.selectionStart ?? el.value.length;
+        caretDigits.current = el.value.slice(0, caret).replace(/\D/g, '').length;
+        onChange(parseAmountInput(el.value));
+      }}
+      {...rest}
+    />
+  );
+}
+
+const INTERVAL_LABELS = { 1: 'Monthly', 2: 'Every 2 months', 3: 'Every 3 months' };
+const INTERVAL_SHORT = { 1: 'Monthly', 2: 'Every 2 mo', 3: 'Every 3 mo' };
+
+function intervalSummary(count, amount) {
+  const noun = count === 1 ? 'payment' : 'payments';
+  return `${count} ${noun} of ${formatCurrency(amount)}`;
+}
+
+function Stepper({ value, min, max, onChange, label }) {
+  return (
+    <div className="stepper" role="group" aria-label={label}>
+      <button type="button" className="stepper-btn" onClick={() => onChange(value - 1)} disabled={value <= min} aria-label={`Fewer ${label.toLowerCase()}`}>−</button>
+      <span className="stepper-value" aria-live="polite">{value}</span>
+      <button type="button" className="stepper-btn" onClick={() => onChange(value + 1)} disabled={value >= max} aria-label={`More ${label.toLowerCase()}`}>+</button>
+    </div>
+  );
+}
+
+// Read-only list of upcoming payments; long monthly plans collapse the middle
+function SchedulePreview({ rows }) {
+  const shown = rows.length > 4 ? [rows[0], rows[1], null, rows[rows.length - 1]] : rows;
+  return (
+    <ol className="schedule-preview">
+      {shown.map((row, i) => (row === null ? (
+        <li key="more" className="schedule-preview-more">{rows.length - 3} more in between</li>
+      ) : (
+        <li key={row.dueDate + i} className="schedule-preview-row">
+          <span>{formatDate(parseDueDate(row.dueDate))}</span>
+          <span className="schedule-preview-amount">{formatCurrency(row.amount)}</span>
+        </li>
+      )))}
+    </ol>
+  );
+}
+
+// Equal-payment schedule once the deposit unlocks flexible plans: one card per frequency,
+// each priced up front; the chosen card opens with a payment count and the dates.
+function SchedulePlanCards({ schedule }) {
+  const { intervalMonths, setIntervalMonths, count, setCount, maxCount, previewRows, onCustom, cardOptions } = schedule;
+  return (
+    <section className="section interval-section">
+      <div className="label">How often</div>
+      <div className="plan-cards" role="radiogroup" aria-label="How often">
+        {cardOptions.map((opt) => {
+          const selected = opt.intervalMonths === intervalMonths;
+          return (
+            <div key={opt.intervalMonths} className={`plan-card${selected ? ' selected' : ''}`}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className="plan-card-head"
+                onClick={() => setIntervalMonths(opt.intervalMonths)}
+              >
+                <span className="plan-card-radio" aria-hidden="true"></span>
+                <span className="plan-card-title">{INTERVAL_LABELS[opt.intervalMonths]}</span>
+                <span className="plan-card-sub">{intervalSummary(opt.count, opt.amount)}</span>
+              </button>
+              {selected && (
+                <div className="plan-card-body">
+                  <div className="stepper-row">
+                    <span className="stepper-label">Number of payments</span>
+                    <Stepper value={count} min={1} max={maxCount} onChange={setCount} label="Payments" />
+                  </div>
+                  <SchedulePreview rows={previewRows} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <button type="button" className="plan-card plan-card-custom" onClick={onCustom}>
+          <span className="plan-card-title">Choose my own dates</span>
+          <span className="plan-card-sub">Set each payment's date and amount</span>
+        </button>
+      </div>
+    </section>
+  );
+}
 
 // Shared price display/slider used by both "Pay in Full" and "Payment Plan" views
 function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, slidingScaleMin, slidingScaleMax, fixedPrice }) {
@@ -54,6 +171,7 @@ function CustomScheduleEditor({
   dueDate,
   scheduleValidation,
   onEvenSplit,
+  onBackToEqual,
 }) {
   const minDate = toDateInputValue(getTodayLocal());
 
@@ -109,17 +227,11 @@ function CustomScheduleEditor({
             </div>
             <label className="custom-schedule-field">
               <span>Amount</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
+              <AmountInput
                 className="custom-schedule-amount"
-                placeholder="0"
-                value={row.amount === '' ? '' : row.amount}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '');
-                  updateRow(row.id, 'amount', digits === '' ? '' : parseInt(digits, 10));
-                }}
+                placeholder="$0"
+                value={row.amount}
+                onChange={(amount) => updateRow(row.id, 'amount', amount)}
                 aria-label={`Payment ${index + 1} amount`}
               />
             </label>
@@ -143,6 +255,7 @@ function CustomScheduleEditor({
       <div className={`custom-schedule-balance${scheduleValidation.remainderMismatch ? ' custom-schedule-balance-error' : ''}`}>
         Allocated: {formatCurrency(scheduleValidation.allocated)} of {formatCurrency(remainder)} remaining
       </div>
+      <button type="button" className="text-link-btn" onClick={onBackToEqual}>Back to equal payments</button>
     </section>
   );
 }
@@ -312,7 +425,10 @@ function App() {
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
   const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null));
   const [invoiceUrl, setInvoiceUrl] = useState(previewDone ? '#' : null);
-  const [scheduleMode, setScheduleMode] = useState('monthly');
+  const [scheduleMode, setScheduleMode] = useState('equal');
+  const [intervalMonths, setIntervalMonths] = useState(1);
+  // Payments per frequency (months between payments → count); monthly uses `months`
+  const [intervalCounts, setIntervalCounts] = useState({ 2: 3, 3: 2 });
   const [customInstallments, setCustomInstallments] = useState([]);
 
   // Derived values
@@ -324,9 +440,22 @@ function App() {
   const monthlyPayment = remainder / months;
   const canUseCustomSchedule = qualifiesForCustomSchedule(deposit, totalPrice);
   const useCustomSchedule = scheduleMode === 'custom' && canUseCustomSchedule;
+  // Equal payments every 2+ months go out as one invoice per payment, like custom dates.
+  // Monthly stays a Stripe subscription.
+  const useIntervalSchedule = canUseCustomSchedule && !useCustomSchedule && intervalMonths > 1;
+  const useInstallments = useCustomSchedule || useIntervalSchedule;
+
+  const maxPaymentsFor = (n) => (n === 1 ? maxMonths : getMaxIntervalPayments({ intervalMonths: n, maxMonths, remainder }));
+  const clampCount = (n, value) => Math.max(1, Math.min(value, maxPaymentsFor(n)));
+  const activeInterval = canUseCustomSchedule ? intervalMonths : 1;
+  const countFor = (n) => (n === 1 ? months : clampCount(n, intervalCounts[n]));
+  const equalCount = countFor(activeInterval);
+  const equalRows = buildIntervalInstallments({ remainder, count: equalCount, intervalMonths: activeInterval });
+  const installmentRows = useCustomSchedule ? customInstallments : (useIntervalSchedule ? equalRows : []);
+  const installmentAmount = useIntervalSchedule ? remainder / equalCount : 0;
 
   const scheduleValidation = validateCustomSchedule({
-    installments: customInstallments,
+    installments: installmentRows,
     remainder,
     dueDate,
   });
@@ -336,14 +465,14 @@ function App() {
     customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate,
   });
   const { depositBelowMin, depositBelowPercent, depositExceedsTotal } = monthlyWarnings;
-  const pastDueDate = useCustomSchedule ? scheduleValidation.pastDueDate : monthlyWarnings.pastDueDate;
-  const belowMinPayment = useCustomSchedule ? scheduleValidation.belowMinPayment : monthlyWarnings.belowMinPayment;
+  const pastDueDate = useInstallments ? scheduleValidation.pastDueDate : monthlyWarnings.pastDueDate;
+  const belowMinPayment = useInstallments ? scheduleValidation.belowMinPayment : monthlyWarnings.belowMinPayment;
   const hasWarning = depositBelowMin || depositBelowPercent || depositExceedsTotal
-    || (useCustomSchedule ? scheduleValidation.hasWarning : monthlyWarnings.hasWarning);
+    || (useInstallments ? scheduleValidation.hasWarning : monthlyWarnings.hasWarning);
 
   useEffect(() => {
     if (!canUseCustomSchedule && scheduleMode === 'custom') {
-      setScheduleMode('monthly');
+      setScheduleMode('equal');
     }
   }, [canUseCustomSchedule, scheduleMode]);
 
@@ -360,9 +489,32 @@ function App() {
     setCustomDeposit(null);
   };
 
+  // Custom dates start from whatever equal schedule is showing, so patients only tweak it
   const switchToCustomSchedule = () => {
     setScheduleMode('custom');
-    setCustomInstallments(suggestCustomInstallments({ remainder, dueDate }));
+    setCustomInstallments(equalRows.map((row, i) => ({ ...row, id: `installment-${Date.now()}-${i}` })));
+  };
+
+  const setEqualCount = (value) => {
+    if (activeInterval === 1) setMonths(Math.max(1, Math.min(value, maxMonths)));
+    else setIntervalCounts((counts) => ({ ...counts, [activeInterval]: clampCount(activeInterval, value) }));
+  };
+
+  // Typical payment; uneven splits differ by $1, and the date list shows exact amounts
+  const cardOptions = PAYMENT_INTERVALS.map((n) => {
+    const count = countFor(n);
+    return { intervalMonths: n, count, amount: remainder / count };
+  });
+
+  const scheduleProps = {
+    intervalMonths,
+    setIntervalMonths,
+    count: equalCount,
+    setCount: setEqualCount,
+    maxCount: maxPaymentsFor(activeInterval),
+    previewRows: activeInterval === 1 ? equalRows.map((row) => ({ ...row, amount: monthlyPayment })) : equalRows,
+    onCustom: switchToCustomSchedule,
+    cardOptions,
   };
 
   const handleEvenSplit = () => {
@@ -422,16 +574,16 @@ function App() {
 
     const submissionPaymentOption = paymentOption === 'full'
       ? 'full'
-      : (useCustomSchedule ? 'installment' : 'plan');
-    const normalizedInstallments = useCustomSchedule
-      ? customInstallments.map(({ amount, dueDate: installmentDueDate }) => ({
+      : (useInstallments ? 'installment' : 'plan');
+    const normalizedInstallments = useInstallments
+      ? installmentRows.map(({ amount, dueDate: installmentDueDate }) => ({
         amount: Number(amount),
         dueDate: installmentDueDate,
       }))
       : null;
     const submissionPayoffDate = paymentOption === 'full'
       ? null
-      : (useCustomSchedule ? scheduleValidation.payoffDate : payoffDate);
+      : (useInstallments ? scheduleValidation.payoffDate : payoffDate);
 
     const payload = {
       name: patientName.trim(),
@@ -439,8 +591,8 @@ function App() {
       totalPrice,
       paymentOption: submissionPaymentOption,
       deposit: paymentOption === 'full' ? totalPrice : deposit,
-      monthlyPayment: paymentOption === 'full' || useCustomSchedule ? 0 : monthlyPayment,
-      months: paymentOption === 'full' ? 0 : (useCustomSchedule ? normalizedInstallments.length : months),
+      monthlyPayment: paymentOption === 'full' || useInstallments ? 0 : monthlyPayment,
+      months: paymentOption === 'full' ? 0 : (useInstallments ? normalizedInstallments.length : months),
       payoffDate: submissionPayoffDate ? submissionPayoffDate.toISOString() : null,
       dueDate: dueDate || null,
       isSlidingScale,
@@ -449,7 +601,7 @@ function App() {
       timestamp: new Date().toISOString(),
       depositPercent: paymentOption !== 'full' && customDeposit === null ? depositPercent : null,
       customDeposit: paymentOption !== 'full' && customDeposit !== null ? customDeposit : null,
-      ...(useCustomSchedule && { installments: normalizedInstallments }),
+      ...(useInstallments && { installments: normalizedInstallments }),
     };
 
     const bodyString = JSON.stringify(payload);
@@ -480,7 +632,8 @@ function App() {
       }
 
       setShowAchModal(false);
-      if (useCustomSchedule) {
+      if (useInstallments) {
+        setCustomInstallments(installmentRows);
         setPaymentOption('installment');
       }
       setSubmitSuccess(true);
@@ -635,20 +788,17 @@ function App() {
                   {Math.round(percent * 100)}%
                 </button>
               ))}
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
+              <AmountInput
                 className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
                 placeholder="Custom"
+                aria-label="Custom deposit amount"
                 value={customDeposit !== null ? customDeposit : ''}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '');
-                  if (digits === '') {
+                onChange={(amount) => {
+                  if (amount === '') {
                     setCustomDeposit(null);
                     setDepositPercent(0.10);
                   } else {
-                    setCustomDeposit(parseInt(digits, 10));
+                    setCustomDeposit(amount);
                     setDepositPercent(null);
                   }
                 }}
@@ -656,34 +806,7 @@ function App() {
             </div>
           </div>
 
-          {canUseCustomSchedule && (
-            <section className="section schedule-mode-section">
-              <div className="label" style={{ marginBottom: '10px' }}>Payment schedule</div>
-              <div className="schedule-mode-toggle">
-                <button
-                  type="button"
-                  className={`quick-btn ${scheduleMode === 'monthly' ? 'active' : ''}`}
-                  onClick={() => setScheduleMode('monthly')}
-                >
-                  Equal monthly
-                </button>
-                <button
-                  type="button"
-                  className={`quick-btn ${scheduleMode === 'custom' ? 'active' : ''}`}
-                  onClick={switchToCustomSchedule}
-                >
-                  Custom dates
-                </button>
-              </div>
-              {scheduleMode === 'custom' && (
-                <p className="schedule-mode-note">
-                  Set your own dates. Each payment is its own invoice, not a monthly subscription.
-                </p>
-              )}
-            </section>
-          )}
-
-          {!useCustomSchedule && (
+          {!canUseCustomSchedule && (
             <section className="section timeline-section">
               <div className="timeline-header">
                 <span className="label">Pay over</span>
@@ -704,6 +827,8 @@ function App() {
             </section>
           )}
 
+          {canUseCustomSchedule && !useCustomSchedule && <SchedulePlanCards schedule={scheduleProps} />}
+
           {useCustomSchedule && (
             <CustomScheduleEditor
               installments={customInstallments}
@@ -712,6 +837,7 @@ function App() {
               dueDate={dueDate}
               scheduleValidation={scheduleValidation}
               onEvenSplit={handleEvenSplit}
+              onBackToEqual={() => setScheduleMode('equal')}
             />
           )}
 
@@ -725,6 +851,11 @@ function App() {
               <div className="summary-card">
                 <span className="card-label">{customInstallments.length} Payments</span>
                 <span className="card-amount">{formatCurrency(remainder)}</span>
+              </div>
+            ) : useIntervalSchedule ? (
+              <div className="summary-card">
+                <span className="card-label">{equalCount}× {INTERVAL_SHORT[intervalMonths]}</span>
+                <span className="card-amount">{formatCurrency(installmentAmount)}</span>
               </div>
             ) : (
               <div className="summary-card">
@@ -741,7 +872,9 @@ function App() {
                 <div className="warning">
                   {useCustomSchedule
                     ? 'Your last payment is after your due date—move dates earlier or adjust amounts.'
-                    : 'This plan extends past your due date—adjust months to finish earlier.'}
+                    : useIntervalSchedule
+                      ? 'Your last payment is after your due date—choose fewer payments to finish earlier.'
+                      : 'This plan extends past your due date—adjust months to finish earlier.'}
                 </div>
               )}
               {useCustomSchedule && scheduleValidation.remainderMismatch && (
@@ -761,7 +894,7 @@ function App() {
               )}
               {belowMinPayment && (
                 <div className="warning">
-                  {useCustomSchedule
+                  {useInstallments
                     ? `Each payment must be at least ${formatCurrency(MIN_MONTHLY_PAYMENT)}.`
                     : `The minimum payment is ${formatCurrency(MIN_MONTHLY_PAYMENT)}/mo. Try a shorter timeframe or higher deposit.`}
                 </div>
@@ -795,6 +928,8 @@ function App() {
               <p>
                 {useCustomSchedule
                   ? `After you submit, we'll send your deposit invoice right away. Each scheduled payment gets its own invoice on the date you chose${payByDateText}.`
+                  : useIntervalSchedule
+                  ? `After you submit, we'll send your deposit invoice right away. Your first payment invoice arrives about 30 days later, then one every ${intervalMonths} months${payByDateText}.`
                   : `After you submit, we'll send a deposit invoice right away. Your first monthly invoice arrives about 30 days later, then one each month after that${payByDateText}.`}
               </p>
             </div>
@@ -802,7 +937,7 @@ function App() {
               <div className="info-item">
                 <strong>Need more flexibility?</strong>
                 <p>
-                  Put down 25% or more to build a custom payment schedule, or{' '}
+                  Put down 50% or more to pay every 2 or 3 months or pick your own dates, or{' '}
                   <button className="contact-link" onClick={() => setShowContactModal(true)}>contact us</button>.
                 </p>
               </div>

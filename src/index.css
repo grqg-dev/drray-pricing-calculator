@@ -253,27 +253,6 @@ body {
   color: var(--warm-gray);
 }
 
-/* Schedule mode (monthly subscription vs custom invoices) */
-.schedule-mode-section {
-  margin-bottom: 4px;
-}
-
-.schedule-mode-toggle {
-  display: flex;
-  gap: 8px;
-}
-
-.schedule-mode-toggle .quick-btn {
-  flex: 1;
-}
-
-.schedule-mode-note {
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--warm-gray);
-}
-
 .custom-schedule-section {
   margin-top: 4px;
 }
@@ -344,7 +323,7 @@ body {
 }
 
 .custom-schedule-field span {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -353,17 +332,35 @@ body {
 
 .custom-schedule-amount,
 .custom-schedule-date {
+  display: block;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: 44px;
+  height: 44px;
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.12);
   background: white;
   font-family: inherit;
   font-size: 16px;
+  line-height: 22px;
   color: var(--charcoal);
+  text-align: left;
+  /* iOS Safari gives native date fields an intrinsic width and centered text that
+     ignore width/min-width; dropping native appearance makes them obey the card */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.custom-schedule-date::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}
+
+.custom-schedule-amount:focus,
+.custom-schedule-date:focus {
+  outline: 2px solid var(--terracotta-deep);
+  outline-offset: 1px;
 }
 
 .custom-schedule-remove {
@@ -392,6 +389,174 @@ body {
 
 .custom-schedule-balance-error {
   color: var(--warning-text);
+}
+
+/* Equal-payment schedule (deposit 50%+) */
+.interval-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stepper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stepper-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stepper-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  background: var(--cream);
+  font-family: inherit;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--charcoal);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stepper-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.stepper-value {
+  min-width: 36px;
+  text-align: center;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 24px;
+}
+
+.schedule-preview {
+  list-style: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.schedule-preview-row,
+.schedule-preview-more {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 14px;
+  color: var(--charcoal);
+}
+
+.schedule-preview-more {
+  justify-content: center;
+  font-size: 13px;
+  color: var(--warm-gray);
+}
+
+.schedule-preview-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-link-btn {
+  align-self: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--terracotta-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.custom-schedule-section .text-link-btn {
+  display: block;
+  margin: 4px auto 0;
+}
+
+.plan-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plan-card {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: var(--cream);
+  overflow: hidden;
+}
+
+.plan-card.selected {
+  border: 2px solid var(--terracotta-deep);
+  background: white;
+}
+
+.plan-card-head,
+.plan-card-custom {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  color: var(--charcoal);
+  cursor: pointer;
+}
+
+.plan-card-custom {
+  grid-template-columns: 1fr;
+}
+
+.plan-card-radio {
+  grid-row: span 2;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--warm-gray);
+}
+
+.plan-card.selected .plan-card-radio {
+  border: 6px solid var(--terracotta-deep);
+}
+
+.plan-card-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.plan-card-sub {
+  font-size: 14px;
+  color: #6B645D;
+}
+
+.plan-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 12px;
 }
 
 /* Timeline Section */
@@ -471,12 +636,12 @@ body {
   min-width: 0;
   min-height: 44px;
   width: 100%;
-  padding: 12px 8px;
+  padding: 12px 4px;
   background: var(--cream);
   border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 16px; /* under 16px, iOS Safari zooms the page when the field is tapped */
   font-weight: 500;
   color: var(--charcoal);
   outline: none;
@@ -494,6 +659,7 @@ body {
 
 .deposit-input::placeholder {
   color: var(--warm-gray);
+  font-size: 14px; /* placeholder can be smaller; the typed value stays 16px to avoid iOS zoom */
 }
 
 .deposit-input:focus {

@@ -8,7 +8,9 @@ export const SLIDING_SCALE_STEP = 250;
 export const DEFAULT_MIN = 4000;
 export const DEPOSIT_PRESETS = [0.10, 0.25, 0.50];
 /** Deposits at or above this fraction of package price unlock custom (non-subscription) schedules */
-export const CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION = 0.25;
+export const CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION = 0.50;
+/** Months between equal payments offered once the deposit unlocks flexible schedules */
+export const PAYMENT_INTERVALS = [1, 2, 3];
 export const SUBMISSION_API_URL = import.meta.env.VITE_SUBMISSION_API_URL || 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
 
 // ── Formatting ─────────────────────────────────────────────
@@ -28,6 +30,18 @@ export function formatCurrency(amount) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(amount);
+}
+
+// Whole-dollar input display: 2500 → "2,500"; empty stays empty
+export function formatAmountInput(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
+}
+
+// Typed text → whole dollars ('' when no digits), ignoring commas, "$", and stray characters
+export function parseAmountInput(text) {
+  const digits = String(text).replace(/\D/g, '');
+  return digits === '' ? '' : parseInt(digits, 10);
 }
 
 // ── Validation ─────────────────────────────────────────────
@@ -72,6 +86,17 @@ export function toDateInputValue(date) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// Adds whole months, clamping to the month's last day (Jan 31 + 1 → Feb 28, not Mar 3)
+export function addMonths(date, months) {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
 }
 
 // ── URL parameters ─────────────────────────────────────────
@@ -148,6 +173,28 @@ export function distributeInstallmentAmounts(remainder, count) {
     leftover -= 1;
   }
   return amounts;
+}
+
+/**
+ * Most equal payments allowed at a given spacing: the last one must land within the
+ * plan's max term (same span as `maxMonths` monthly invoices), and each must meet the minimum.
+ */
+export function getMaxIntervalPayments({ intervalMonths, maxMonths, remainder }) {
+  const byTerm = Math.floor((maxMonths - 1) / intervalMonths) + 1;
+  const byMinPayment = Math.floor(remainder / MIN_MONTHLY_PAYMENT);
+  return Math.max(1, Math.min(byTerm, byMinPayment));
+}
+
+/**
+ * Equal payments every `intervalMonths`, starting with the first invoice date (~30 days out).
+ * Same shape as custom installments so both submit as one invoice per payment.
+ */
+export function buildIntervalInstallments({ remainder, count, intervalMonths, start = getFirstInvoiceDate() }) {
+  return distributeInstallmentAmounts(remainder, count).map((amount, i) => ({
+    id: `installment-${i}`,
+    amount,
+    dueDate: toDateInputValue(addMonths(start, i * intervalMonths)),
+  }));
 }
 
 /**
