@@ -111,6 +111,7 @@ function validateLockedSubmission(payload, secret, now = Date.now()) {
 }
 
 const CALCULATOR_APP_URL = 'https://payment-calculator.drjuliaray.com';
+const ALLOWED_EXTENDED = new Set(['3', '6', '12', 'true']);
 
 function signLockedLink(payload, secret, now = Date.now()) {
   if (!secret) return { ok: false, status: 500, error: 'Link signing is not configured' };
@@ -129,7 +130,7 @@ function signLockedLink(payload, secret, now = Date.now()) {
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
     return { ok: false, status: 400, error: 'Due date must be YYYY-MM-DD' };
   }
-  if (extended && extended !== '12' && extended !== 'true') {
+  if (extended && !ALLOWED_EXTENDED.has(extended)) {
     return { ok: false, status: 400, error: 'Payment term is not valid' };
   }
   try {
@@ -194,4 +195,5 @@ module.exports = {
   signLockedLink,
   buildLockedUrl,
   CALCULATOR_APP_URL,
+  ALLOWED_EXTENDED,
 };

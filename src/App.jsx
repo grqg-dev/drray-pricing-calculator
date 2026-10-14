@@ -432,6 +432,7 @@ function App() {
   // State
   const [selectedPrice, setSelectedPrice] = useState(isSlidingScale ? defaultSlidingPrice : FIXED_PRICE);
   const [months, setMonths] = useState(6);
+  const termMonths = Math.min(months, maxMonths);
   const [depositPercent, setDepositPercent] = useState(0.10);
   const [customDeposit, setCustomDeposit] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -458,13 +459,13 @@ function App() {
   const lockView = describeLockState(lockQuery, priceLocked);
   const effectiveSliding = isSlidingScale && !priceLocked;
   const totalPrice = priceLocked ? lockQuery.maxPrice : (isSlidingScale ? selectedPrice : FIXED_PRICE);
-  const payoffDate = getPayoffDate(months);
+  const payoffDate = getPayoffDate(termMonths);
   const minDepositAmount = calculateMinDeposit(totalPrice, effectiveSliding);
   const deposit = priceLocked
     ? lockQuery.deposit
     : calculateDeposit({ customDeposit, minDepositAmount, totalPrice, depositPercent });
   const remainder = totalPrice - deposit;
-  const monthlyPayment = remainder / months;
+  const monthlyPayment = remainder / termMonths;
   const canUseCustomSchedule = qualifiesForCustomSchedule(deposit, totalPrice);
   const useCustomSchedule = scheduleMode === 'custom' && canUseCustomSchedule;
   // Equal payments every 2+ months go out as one invoice per payment, like custom dates.
@@ -475,7 +476,7 @@ function App() {
   const maxPaymentsFor = (n) => (n === 1 ? maxMonths : getMaxIntervalPayments({ intervalMonths: n, maxMonths, remainder }));
   const clampCount = (n, value) => Math.max(1, Math.min(value, maxPaymentsFor(n)));
   const activeInterval = canUseCustomSchedule ? intervalMonths : 1;
-  const countFor = (n) => (n === 1 ? months : clampCount(n, intervalCounts[n]));
+  const countFor = (n) => (n === 1 ? termMonths : clampCount(n, intervalCounts[n]));
   const equalCount = countFor(activeInterval);
   const equalRows = buildIntervalInstallments({ remainder, count: equalCount, intervalMonths: activeInterval });
   const installmentRows = useCustomSchedule ? customInstallments : (useIntervalSchedule ? equalRows : []);
@@ -649,7 +650,7 @@ function App() {
       paymentOption: submissionPaymentOption,
       deposit: activePaymentOption === 'full' ? totalPrice : deposit,
       monthlyPayment: activePaymentOption === 'full' || useInstallments ? 0 : monthlyPayment,
-      months: activePaymentOption === 'full' ? 0 : (useInstallments ? normalizedInstallments.length : months),
+      months: activePaymentOption === 'full' ? 0 : (useInstallments ? normalizedInstallments.length : termMonths),
       payoffDate: submissionPayoffDate ? submissionPayoffDate.toISOString() : null,
       dueDate: dueDate || null,
       isSlidingScale: effectiveSliding,
@@ -735,7 +736,7 @@ function App() {
         invoiceUrl={invoiceUrl}
         deposit={deposit}
         monthlyPayment={monthlyPayment}
-        months={months}
+        months={termMonths}
         totalPrice={totalPrice}
         isSlidingScale={effectiveSliding}
         installments={activePaymentOption === 'installment' ? customInstallments : null}
@@ -898,18 +899,18 @@ function App() {
             <section className="section timeline-section">
               <div className="timeline-header">
                 <span className="label">Pay over</span>
-                <span className="months-value">{months} {months === 1 ? 'month' : 'months'}</span>
+                <span className="months-value">{termMonths} {termMonths === 1 ? 'month' : 'months'}</span>
               </div>
               <div className="slider-wrapper">
                 <input
                   type="range"
                   min="1"
                   max={maxMonths}
-                  value={months}
-                  onChange={(e) => setMonths(parseInt(e.target.value, 10))}
+                  value={termMonths}
+                  onChange={(e) => setMonths(Math.max(1, Math.min(parseInt(e.target.value, 10), maxMonths)))}
                   className="slider"
                   aria-label="Select payment duration"
-                  style={{ '--progress': `${((months - 1) / (maxMonths - 1)) * 100}%` }}
+                  style={{ '--progress': `${((termMonths - 1) / (maxMonths - 1)) * 100}%` }}
                 />
               </div>
             </section>
@@ -947,7 +948,7 @@ function App() {
               </div>
             ) : (
               <div className="summary-card">
-                <span className="card-label">{months}× Monthly</span>
+                <span className="card-label">{termMonths}× Monthly</span>
                 <span className="card-amount">{formatCurrency(monthlyPayment)}</span>
               </div>
             )}

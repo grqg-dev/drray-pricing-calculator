@@ -468,6 +468,11 @@ describe('getMaxMonths', () => {
     expect(getMaxMonths(null)).toBe(9);
   });
 
+  it('caps at 3 or 6 months when asked', () => {
+    expect(getMaxMonths('3')).toBe(3);
+    expect(getMaxMonths('6')).toBe(6);
+  });
+
   it('caps at 12 months for extended=12', () => {
     expect(getMaxMonths('12')).toBe(12);
   });
@@ -773,6 +778,19 @@ describe('locked price links', () => {
     expect(gateLockedRequest({
       action: 'signLock', maxPrice: 6000, deposit: 3000,
     }, '').statusCode).toBe(500)
+  })
+
+  it('accepts a 3 or 6 month payoff cap and rejects any other term', () => {
+    for (const extended of ['3', '6']) {
+      const gate = gateLockedRequest({
+        action: 'signLock', maxPrice: 6000, deposit: 3000, extended,
+      }, LOCK_SECRET)
+      expect(gate.statusCode).toBe(200)
+      expect(gate.body.url).toContain(`extended=${extended}`)
+    }
+    expect(gateLockedRequest({
+      action: 'signLock', maxPrice: 6000, deposit: 3000, extended: '4',
+    }, LOCK_SECRET).statusCode).toBe(400)
   })
 
   it('answers verifyLock without treating it as a submission', () => {

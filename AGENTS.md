@@ -112,6 +112,8 @@ All pure business logic in `src/utils.js` is tested (36 tests):
 - **`slidingScale=true`** — Enable sliding scale pricing (default fixed price is $10,000). Slider opens at the midpoint of the min/max range (snapped to $250 steps), not the minimum.
 - **`originalPrice=5000`** — Set minimum sliding scale price (default: $4,000)
 - **`dueDate=2026-06-30`** — Show due date, trigger warnings if plan extends past it
+- **`extended=3`** — Cap the remainder at 3 months (default: 9)
+- **`extended=6`** — Cap the remainder at 6 months (default: 9)
 - **`extended=true`** — Allow up to 18 months (default: 9)
 - **`extended=12`** — Allow up to 12 months (default: 9)
 - **`maxPrice=10000`** — Override default fixed price ($10,000)

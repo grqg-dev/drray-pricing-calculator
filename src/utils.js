@@ -127,8 +127,11 @@ export function parseUrlParams() {
 const DEFAULT_MAX_MONTHS = 9;
 const EXTENDED_MAX_MONTHS = 18;
 
-// `extended=12` caps at 12 months; `extended=true` (or any other truthy value) caps at 18.
+// `extended=3` or `6` shortens the cap. `extended=12` caps at 12 months.
+// `extended=true` (or any other truthy value) caps at 18. Anything else stays at 9.
 export function getMaxMonths(extendedParam) {
+  if (extendedParam === '3') return 3;
+  if (extendedParam === '6') return 6;
   if (extendedParam === '12') return 12;
   if (extendedParam === 'true') return EXTENDED_MAX_MONTHS;
   return DEFAULT_MAX_MONTHS;
