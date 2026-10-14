@@ -109,13 +109,34 @@ All pure business logic in `src/utils.js` is tested (36 tests):
 
 ## URL Parameters (Query String)
 
-- **`slidingScale=true`** — Enable sliding scale pricing (default: fixed $8,500). Slider opens at the midpoint of the min/max range (snapped to $250 steps), not the minimum.
+- **`slidingScale=true`** — Enable sliding scale pricing (default fixed price is $10,000). Slider opens at the midpoint of the min/max range (snapped to $250 steps), not the minimum.
 - **`originalPrice=5000`** — Set minimum sliding scale price (default: $4,000)
 - **`dueDate=2026-06-30`** — Show due date, trigger warnings if plan extends past it
 - **`extended=true`** — Allow up to 18 months (default: 9)
 - **`extended=12`** — Allow up to 12 months (default: 9)
-- **`maxPrice=10000`** — Override default $8,500 maximum
+- **`maxPrice=10000`** — Override default fixed price ($10,000)
 - **`preview=done`** — Show success screen with sample data
+- **`deposit=3000`** — With `lock=1` and `sig`, the agreed deposit in whole dollars
+- **`lock=1`** — Lock the total and deposit. Requires a valid `sig`
+- **`exp`** — Optional unix expiry, included in the signature
+- **`sig`** — HMAC-SHA256 of `v1|maxPrice|deposit|exp`, base64url
+
+`dueDate` and `extended` can be added to a locked link and are not signed. Links without `lock=1` behave as before: `deposit`, `exp`, and `sig` are ignored.
+
+### Locked patient links
+
+Staff mint a link (secret never goes in the page bundle):
+
+```bash
+PRICE_LOCK_SECRET=... node scripts/generate-locked-price-link.js --total 6000 --deposit 3000
+PRICE_LOCK_SECRET=... node scripts/generate-locked-price-link.js --total 6000 --deposit 3000 --due-date 2026-08-01 --extended 12 --days 30
+```
+
+The page shows the total and deposit read-only, hides "Pay in full" unless the deposit is the whole total, and shows the schedule cards when the deposit is at least 50%. A bad signature shows an error instead of the open calculator.
+
+The Lambda checks `lock` before DynamoDB, Make, or Stripe. `action: "verifyLock"` only reports `{ valid: true|false }`. A submission whose total or deposit doesn't match the signature returns 400 and creates nothing. Unsigned submissions are unchanged.
+
+Set `PRICE_LOCK_SECRET` on `price-submission-handler` before using locked links in production. Leave `VITE_PRICE_LOCK_SECRET` unset on Amplify so the secret stays on the Lambda. Deploy the Lambda before the page that calls `verifyLock`. Do not deploy either to production without Matt's confirmation.
 
 ### Example URLs
 ```
@@ -184,7 +205,8 @@ npm run test:watch # Tests in watch mode
   name, email, totalPrice, paymentOption,
   deposit, monthlyPayment, months, payoffDate,
   dueDate, isSlidingScale, originalPrice, isExtended,
-  timestamp, depositPercent, customDeposit
+  timestamp, depositPercent, customDeposit,
+  lock: { maxPrice, deposit, exp, sig }  // only for locked links
 }
 ```
 Posted to AWS Lambda endpoint. Response may include `invoiceUrl` (Stripe hosted invoice link).

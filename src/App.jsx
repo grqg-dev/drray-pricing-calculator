@@ -9,6 +9,10 @@ import {
   toDateInputValue, getEarliestPaymentDate, formatAmountInput, parseAmountInput,
   PAYMENT_INTERVALS, getMaxIntervalPayments, buildIntervalInstallments,
 } from './utils'
+import {
+  parseLockQuery, describeLockState, signatureMatches, verifyLockRemote, isLockExpired,
+  LOCK_PAGE_ERROR,
+} from './lock'
 
 // ── Sub-components ─────────────────────────────────────────
 
@@ -129,7 +133,7 @@ function SchedulePlanCards({ schedule }) {
 }
 
 // Shared price display/slider used by both "Pay in Full" and "Payment Plan" views
-function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, slidingScaleMin, slidingScaleMax, fixedPrice }) {
+function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, slidingScaleMin, slidingScaleMax, fixedPrice, locked = false }) {
   if (isSlidingScale) {
     const progress = ((selectedPrice - slidingScaleMin) / (slidingScaleMax - slidingScaleMin)) * 100;
     return (
@@ -160,6 +164,7 @@ function PriceSection({ isSlidingScale, selectedPrice, setSelectedPrice, sliding
     <section className="section price-section">
       <div className="label">Total</div>
       <div className="price-value">{formatCurrency(fixedPrice)}</div>
+      {locked && <p className="lock-note">Set for this link.</p>}
     </section>
   );
 }
@@ -397,9 +402,24 @@ function DoneView({
 
 // ── Main App ───────────────────────────────────────────────
 
+function LockGate({ subtitle, message, alert = false }) {
+  return (
+    <div className="app">
+      <header className="header">
+        <div>
+          <h1>Payment Calculator</h1>
+          <p className="header-subtitle">{subtitle}</p>
+        </div>
+      </header>
+      <p className="lock-status" role={alert ? 'alert' : 'status'}>{message}</p>
+    </div>
+  );
+}
+
 function App() {
   // URL configuration (read-only, parsed once per render)
   const { isSlidingScale, originalPrice, dueDate, extendedParam, maxPrice, previewDone } = parseUrlParams();
+  const lockQuery = parseLockQuery(window.location.search);
 
   // Derived pricing constants
   const FIXED_PRICE = maxPrice || DEFAULT_FIXED_PRICE;
@@ -421,7 +441,8 @@ function App() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [showAchModal, setShowAchModal] = useState(false);
   const [showIntroModal, setShowIntroModal] = useState(!previewDone);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(isSlidingScale && !previewDone);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(isSlidingScale && !previewDone && !lockQuery.requested);
+  const [lockStatus, setLockStatus] = useState(lockQuery.requested ? 'checking' : 'open');
   const [patientName, setPatientName] = useState(previewDone ? 'Jane Doe' : '');
   const [patientEmail, setPatientEmail] = useState(previewDone ? 'jane@example.com' : '');
   const [paymentOption, setPaymentOption] = useState(previewDone ? 'plan' : (isSlidingScale ? 'plan' : null));
@@ -433,10 +454,15 @@ function App() {
   const [customInstallments, setCustomInstallments] = useState([]);
 
   // Derived values
-  const totalPrice = isSlidingScale ? selectedPrice : FIXED_PRICE;
+  const priceLocked = lockStatus === 'locked';
+  const lockView = describeLockState(lockQuery, priceLocked);
+  const effectiveSliding = isSlidingScale && !priceLocked;
+  const totalPrice = priceLocked ? lockQuery.maxPrice : (isSlidingScale ? selectedPrice : FIXED_PRICE);
   const payoffDate = getPayoffDate(months);
-  const minDepositAmount = calculateMinDeposit(totalPrice, isSlidingScale);
-  const deposit = calculateDeposit({ customDeposit, minDepositAmount, totalPrice, depositPercent });
+  const minDepositAmount = calculateMinDeposit(totalPrice, effectiveSliding);
+  const deposit = priceLocked
+    ? lockQuery.deposit
+    : calculateDeposit({ customDeposit, minDepositAmount, totalPrice, depositPercent });
   const remainder = totalPrice - deposit;
   const monthlyPayment = remainder / months;
   const canUseCustomSchedule = qualifiesForCustomSchedule(deposit, totalPrice);
@@ -465,7 +491,9 @@ function App() {
   const monthlyWarnings = getWarnings({
     customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate,
   });
-  const { depositBelowMin, depositBelowPercent, depositExceedsTotal } = monthlyWarnings;
+  const depositBelowMin = priceLocked ? false : monthlyWarnings.depositBelowMin;
+  const depositBelowPercent = priceLocked ? false : monthlyWarnings.depositBelowPercent;
+  const depositExceedsTotal = priceLocked ? false : monthlyWarnings.depositExceedsTotal;
   const pastDueDate = useInstallments ? scheduleValidation.pastDueDate : monthlyWarnings.pastDueDate;
   const belowMinPayment = useInstallments ? scheduleValidation.belowMinPayment : monthlyWarnings.belowMinPayment;
   const hasWarning = depositBelowMin || depositBelowPercent || depositExceedsTotal
@@ -502,6 +530,34 @@ function App() {
   };
 
   // Typical payment; uneven splits differ by $1, and the date list shows exact amounts
+  const chosenOption = paymentOption;
+  const activePaymentOption = priceLocked && chosenOption === null
+    ? (lockQuery.deposit === lockQuery.maxPrice ? 'full' : 'plan')
+    : chosenOption;
+
+  // URL lock is checked once. Production asks the Lambda (secret stays off the page).
+  // VITE_PRICE_LOCK_SECRET is for local UI checks only and must not be set on Amplify.
+  useEffect(() => {
+    if (!lockQuery.requested) return undefined;
+    const fields = lockQuery;
+    let cancelled = false;
+    (async () => {
+      try {
+        const secret = import.meta.env.VITE_PRICE_LOCK_SECRET;
+        let valid = false;
+        if (secret) {
+          valid = !isLockExpired(fields.exp) && await signatureMatches(fields, secret);
+        } else {
+          valid = await verifyLockRemote(fields);
+        }
+        if (!cancelled) setLockStatus(valid ? 'locked' : 'invalid');
+      } catch {
+        if (!cancelled) setLockStatus('invalid');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const cardOptions = PAYMENT_INTERVALS.map((n) => {
     const count = countFor(n);
     return { intervalMonths: n, count, amount: remainder / count };
@@ -573,7 +629,7 @@ function App() {
     setIsSubmitting(true);
     setSubmitError(null);
 
-    const submissionPaymentOption = paymentOption === 'full'
+    const submissionPaymentOption = activePaymentOption === 'full'
       ? 'full'
       : (useInstallments ? 'installment' : 'plan');
     const normalizedInstallments = useInstallments
@@ -582,7 +638,7 @@ function App() {
         dueDate: installmentDueDate,
       }))
       : null;
-    const submissionPayoffDate = paymentOption === 'full'
+    const submissionPayoffDate = activePaymentOption === 'full'
       ? null
       : (useInstallments ? scheduleValidation.payoffDate : payoffDate);
 
@@ -591,17 +647,25 @@ function App() {
       email: patientEmail.trim(),
       totalPrice,
       paymentOption: submissionPaymentOption,
-      deposit: paymentOption === 'full' ? totalPrice : deposit,
-      monthlyPayment: paymentOption === 'full' || useInstallments ? 0 : monthlyPayment,
-      months: paymentOption === 'full' ? 0 : (useInstallments ? normalizedInstallments.length : months),
+      deposit: activePaymentOption === 'full' ? totalPrice : deposit,
+      monthlyPayment: activePaymentOption === 'full' || useInstallments ? 0 : monthlyPayment,
+      months: activePaymentOption === 'full' ? 0 : (useInstallments ? normalizedInstallments.length : months),
       payoffDate: submissionPayoffDate ? submissionPayoffDate.toISOString() : null,
       dueDate: dueDate || null,
-      isSlidingScale,
+      isSlidingScale: effectiveSliding,
       originalPrice: originalPrice || null,
       isExtended,
       timestamp: new Date().toISOString(),
-      depositPercent: paymentOption !== 'full' && customDeposit === null ? depositPercent : null,
-      customDeposit: paymentOption !== 'full' && customDeposit !== null ? customDeposit : null,
+      depositPercent: activePaymentOption !== 'full' && customDeposit === null && !priceLocked ? depositPercent : null,
+      customDeposit: activePaymentOption !== 'full' && customDeposit !== null && !priceLocked ? customDeposit : null,
+      ...(priceLocked && {
+        lock: {
+          maxPrice: lockQuery.maxPrice,
+          deposit: lockQuery.deposit,
+          ...(lockQuery.exp ? { exp: lockQuery.exp } : {}),
+          sig: lockQuery.sig,
+        },
+      }),
       ...(useInstallments && { installments: normalizedInstallments }),
     };
 
@@ -620,7 +684,14 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let message = `HTTP error! status: ${response.status}`;
+        try {
+          const errBody = await response.json();
+          if (errBody?.error) message = errBody.error;
+        } catch {
+          // Keep the status line when the body isn't JSON.
+        }
+        throw new Error(message);
       }
 
       try {
@@ -648,29 +719,38 @@ function App() {
 
   // ── Render ───────────────────────────────────────────────
 
+  if (lockQuery.requested && lockStatus === 'checking') {
+    return <LockGate subtitle="Payment plan" message="Checking this link…" />;
+  }
+
+  if (lockQuery.requested && lockStatus === 'invalid') {
+    return <LockGate subtitle="Payment plan" message={LOCK_PAGE_ERROR} alert />;
+  }
+
   if (submitSuccess) {
     return (
       <DoneView
-        paymentOption={paymentOption}
+        paymentOption={activePaymentOption}
         patientEmail={patientEmail}
         invoiceUrl={invoiceUrl}
         deposit={deposit}
         monthlyPayment={monthlyPayment}
         months={months}
         totalPrice={totalPrice}
-        isSlidingScale={isSlidingScale}
-        installments={paymentOption === 'installment' ? customInstallments : null}
+        isSlidingScale={effectiveSliding}
+        installments={activePaymentOption === 'installment' ? customInstallments : null}
       />
     );
   }
 
   const priceSectionProps = {
-    isSlidingScale,
+    isSlidingScale: effectiveSliding,
     selectedPrice,
     setSelectedPrice,
     slidingScaleMin,
     slidingScaleMax: SLIDING_SCALE_MAX,
-    fixedPrice: FIXED_PRICE,
+    fixedPrice: priceLocked ? lockQuery.maxPrice : FIXED_PRICE,
+    locked: priceLocked,
   };
 
   // "Pay by" date text for the info section (1 month before due date)
@@ -679,7 +759,7 @@ function App() {
     : '';
 
   return (
-    <div className={`app ${isSlidingScale ? 'sliding-scale-mode' : ''}`}>
+    <div className={`app ${effectiveSliding ? 'sliding-scale-mode' : ''}`}>
       {/* Header */}
       <header className="header">
         <div>
@@ -694,7 +774,7 @@ function App() {
       </header>
 
       {/* Payment Option Selection */}
-      {paymentOption === null && (
+      {activePaymentOption === null && (
         <section className="section payment-option-section">
           <p className="payment-intro">
             Explore your payment options — nothing happens until you're ready, and we'll confirm everything with you first.
@@ -716,7 +796,7 @@ function App() {
       )}
 
       {/* Full Payment Option */}
-      {paymentOption === 'full' && (
+      {activePaymentOption === 'full' && (
         <>
           <PriceSection {...priceSectionProps} />
 
@@ -753,10 +833,12 @@ function App() {
               <strong>Payment Methods</strong>
               <p>We accept all payment methods. If you are planning to use a debit card, consider paying by bank account (ACH) instead — it pulls from the same place and helps us keep things fee-free.</p>
             </div>
-            <div className="info-item">
-              <strong>Need a payment plan instead?</strong>
-              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to payment plan</button></p>
-            </div>
+            {!(priceLocked && lockQuery.deposit === lockQuery.maxPrice) && (
+              <div className="info-item">
+                <strong>Need a payment plan instead?</strong>
+                <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to payment plan</button></p>
+              </div>
+            )}
           </footer>
 
           {/* Submit Button */}
@@ -772,40 +854,45 @@ function App() {
       )}
 
       {/* Payment Plan Option */}
-      {paymentOption === 'plan' && (
+      {activePaymentOption === 'plan' && (
         <>
           <PriceSection {...priceSectionProps} />
 
           {/* Deposit Section */}
-          <div className="deposit-section">
+          <div className={`deposit-section ${priceLocked ? 'deposit-locked' : ''}`}>
             <span className="label">Deposit</span>
-            <div className="deposit-buttons">
-              {DEPOSIT_PRESETS.map(percent => (
-                <button
-                  key={percent}
-                  className={`quick-btn ${depositPercent === percent && customDeposit === null ? 'active' : ''}`}
-                  onClick={() => handlePresetClick(percent)}
-                >
-                  {Math.round(percent * 100)}%
-                </button>
-              ))}
-              <AmountInput
-                className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
-                placeholder="Custom"
-                aria-label="Custom deposit amount"
-                value={customDeposit !== null ? customDeposit : ''}
-                onChange={(amount) => {
-                  if (amount === '') {
-                    setCustomDeposit(null);
-                    setDepositPercent(0.10);
-                  } else {
-                    setCustomDeposit(amount);
-                    setDepositPercent(null);
-                  }
-                }}
-              />
-            </div>
+            {priceLocked ? (
+              <span className="deposit-locked-amount">{formatCurrency(deposit)}</span>
+            ) : (
+              <div className="deposit-buttons">
+                {DEPOSIT_PRESETS.map(percent => (
+                  <button
+                    key={percent}
+                    className={`quick-btn ${depositPercent === percent && customDeposit === null ? 'active' : ''}`}
+                    onClick={() => handlePresetClick(percent)}
+                  >
+                    {Math.round(percent * 100)}%
+                  </button>
+                ))}
+                <AmountInput
+                  className={`deposit-input ${customDeposit !== null ? 'active' : ''}`}
+                  placeholder="Custom"
+                  aria-label="Custom deposit amount"
+                  value={customDeposit !== null ? customDeposit : ''}
+                  onChange={(amount) => {
+                    if (amount === '') {
+                      setCustomDeposit(null);
+                      setDepositPercent(0.10);
+                    } else {
+                      setCustomDeposit(amount);
+                      setDepositPercent(null);
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
+          {priceLocked && <p className="lock-note">Agreed with the office. This amount stays fixed.</p>}
 
           {!canUseCustomSchedule && (
             <section className="section timeline-section">
@@ -943,10 +1030,12 @@ function App() {
                 </p>
               </div>
             )}
-            <div className="info-item">
-              <strong>Want to pay in full instead?</strong>
-              <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to full payment</button></p>
-            </div>
+            {lockView.showPayInFull && (
+              <div className="info-item">
+                <strong>Want to pay in full instead?</strong>
+                <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to full payment</button></p>
+              </div>
+            )}
           </footer>
 
           {/* Submit Button */}
@@ -975,9 +1064,19 @@ function App() {
             <div className="ach-modal-icon">🧭</div>
             <h2>Explore your options</h2>
             <p className="ach-modal-message">
-              This page is for finding a plan that works for you.
-              <br /><br />
-              Nothing is set up until you choose to submit, so take your time looking around.
+              {priceLocked ? (
+                <>
+                  Your total and deposit are already set. You can still choose how to pay the rest.
+                  <br /><br />
+                  Nothing is billed until you submit.
+                </>
+              ) : (
+                <>
+                  This page is for finding a plan that works for you.
+                  <br /><br />
+                  Nothing is set up until you choose to submit, so take your time looking around.
+                </>
+              )}
             </p>
             <button
               className="ach-modal-confirm-btn"

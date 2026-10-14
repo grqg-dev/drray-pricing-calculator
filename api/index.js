@@ -2,6 +2,7 @@ const AWS = require('aws-sdk');
 const https = require('https');
 const { v4: uuidv4 } = require('uuid');
 const Stripe = require('stripe');
+const { gateLockedRequest } = require('./lock-link');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -61,6 +62,16 @@ exports.handler = async (event) => {
       : event.body;
     const payload = JSON.parse(rawBody);
     console.log('Parsed payload:', payload);
+
+    // Locked links are checked before DynamoDB, Make, or Stripe.
+    const gate = gateLockedRequest(payload, process.env.PRICE_LOCK_SECRET);
+    if (gate.type !== 'continue') {
+      return {
+        statusCode: gate.statusCode,
+        headers: responseHeaders,
+        body: JSON.stringify(gate.body),
+      };
+    }
 
     // Validate required fields
     if (!payload.name || !payload.email || typeof payload.totalPrice !== 'number') {
