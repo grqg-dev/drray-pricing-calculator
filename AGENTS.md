@@ -125,7 +125,9 @@ All pure business logic in `src/utils.js` is tested (36 tests):
 
 ### Locked patient links
 
-Staff mint a link (secret never goes in the page bundle):
+Staff mint a link from [the payment link page](https://payment-calculator.drjuliaray.com/staff/payment-link.html) (also linked on the services dashboard). Enter the total and deposit, then copy the link and send it to the patient yourself. The page does not text or email anyone. The patient opens it, picks how to pay the rest, and the deposit invoice goes to the email they enter.
+
+The same link can be minted from the shell. The secret never goes in the page bundle:
 
 ```bash
 PRICE_LOCK_SECRET=... node scripts/generate-locked-price-link.js --total 6000 --deposit 3000
