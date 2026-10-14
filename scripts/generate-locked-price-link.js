@@ -13,7 +13,7 @@ import { createRequire } from 'module';
 import { execSync } from 'child_process';
 
 const require = createRequire(import.meta.url);
-const { buildLockedUrl } = require('../api/lock-link.js');
+const { buildLockedUrl, ALLOWED_EXTENDED } = require('../api/lock-link.js');
 
 const DEFAULT_APP_URL = 'https://payment-calculator.drjuliaray.com';
 
@@ -44,7 +44,7 @@ function usage() {
   node scripts/generate-locked-price-link.js --total 6000 --deposit 3000 --days 30
 
 Requires PRICE_LOCK_SECRET (env, or price-submission-handler Lambda).
-Optional: --app-url, --due-date YYYY-MM-DD, --extended 12|true, --days N`);
+Optional: --app-url, --due-date YYYY-MM-DD, --extended 3|6|12|true, --days N`);
 }
 
 function main() {
@@ -73,8 +73,8 @@ function main() {
     console.error('Error: --due-date must be YYYY-MM-DD');
     process.exit(1);
   }
-  if (extended && extended !== '12' && extended !== 'true') {
-    console.error('Error: --extended must be 12 or true');
+  if (extended && !ALLOWED_EXTENDED.has(extended)) {
+    console.error('Error: --extended must be 3, 6, 12, or true');
     process.exit(1);
   }
 
