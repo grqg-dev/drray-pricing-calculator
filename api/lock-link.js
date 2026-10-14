@@ -110,7 +110,50 @@ function validateLockedSubmission(payload, secret, now = Date.now()) {
   return { ok: true, locked: true, maxPrice: verified.maxPrice, deposit: verified.deposit };
 }
 
+const CALCULATOR_APP_URL = 'https://payment-calculator.drjuliaray.com';
+
+function signLockedLink(payload, secret, now = Date.now()) {
+  if (!secret) return { ok: false, status: 500, error: 'Link signing is not configured' };
+  const maxPrice = Number(payload && payload.maxPrice);
+  const deposit = Number(payload && payload.deposit);
+  let exp = null;
+  if (payload && payload.days != null && payload.days !== '' && Number(payload.days) !== 0) {
+    const days = Number(payload.days);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      return { ok: false, status: 400, error: 'Choose an expiry of 1 to 365 days, or none' };
+    }
+    exp = Math.floor(now / 1000) + days * 24 * 60 * 60;
+  }
+  const dueDate = payload && payload.dueDate ? String(payload.dueDate) : undefined;
+  const extended = payload && payload.extended ? String(payload.extended) : undefined;
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return { ok: false, status: 400, error: 'Due date must be YYYY-MM-DD' };
+  }
+  if (extended && extended !== '12' && extended !== 'true') {
+    return { ok: false, status: 400, error: 'Payment term is not valid' };
+  }
+  try {
+    const url = buildLockedUrl({
+      appUrl: CALCULATOR_APP_URL,
+      maxPrice,
+      deposit,
+      exp,
+      dueDate,
+      extended,
+      secret,
+    });
+    return { ok: true, url };
+  } catch {
+    return { ok: false, status: 400, error: 'Enter a total and a deposit that does not exceed it' };
+  }
+}
+
 function gateLockedRequest(payload, secret, now = Date.now()) {
+  if (payload && payload.action === 'signLock') {
+    const signed = signLockedLink(payload, secret, now);
+    if (!signed.ok) return { type: 'reject', statusCode: signed.status, body: { error: signed.error } };
+    return { type: 'verify', statusCode: 200, body: { url: signed.url } };
+  }
   if (payload && payload.action === 'verifyLock') {
     const result = verifyLockSignature(payload, secret, now);
     return { type: 'verify', statusCode: 200, body: { valid: result.ok === true } };
@@ -148,5 +191,7 @@ module.exports = {
   verifyLockSignature,
   validateLockedSubmission,
   gateLockedRequest,
+  signLockedLink,
   buildLockedUrl,
+  CALCULATOR_APP_URL,
 };
