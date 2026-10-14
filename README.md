@@ -127,6 +127,22 @@ App.jsx
 └── Info Section (payment methods, timing, support)
 ```
 
+## Payment notification
+
+The submission Lambda (`api/index.js`, `price-submission-handler`) notifies the Grok Bot routine "Payment plan / payment notification" after Stripe ids are saved. The webhook cannot fail or stall the patient's submission (5 second timeout). Nothing is deployed until Matt approves.
+
+| Env var | Purpose |
+|---------|---------|
+| `PAY_NOTIFY_WEBHOOK_URL` | Routine webhook URL. Unset skips the call. |
+| `PAY_NOTIFY_WEBHOOK_TOKEN` | Sender key (`Authorization: Bearer …`). A value that already starts with `Bearer ` is not prefixed again. |
+| `PUMBLE_VIA_MAKE_ENABLED` | Default `true`. While true, `MAKE_WEBHOOK_URL` still receives the raw submission (Google Sheets). `false` skips that call. |
+
+Secret name (values stay out of git): `office-pricing/pay-notify-webhook` (`url`, `token`), created with `--profile engineering`.
+
+`plan` and `installment` notify as `plan_selected`. Pay-in-full notifies as `payment_submitted` (assumption for Matt / Finance). `testMode` follows a Stripe test key (`sk_test_` or `rk_test_`).
+
+After a fake-patient test in Stripe test mode passes, Matt removes module #4 (Pumble) from Make scenario 3819523 and leaves the Sheets row in place. Snapshot that scenario first. Do not change Make from this repo.
+
 ## Team Notes
 
 - **Maintainer:** DrRay Care Team

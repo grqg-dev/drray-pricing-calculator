@@ -194,8 +194,8 @@ Edit `src/index.css`:
 ```bash
 npm run dev       # Dev server (http://localhost:5174)
 npm run build     # Production build → dist/
-npm test          # Run tests once
-npm run test:watch # Tests in watch mode
+npm test          # Frontend tests, then the Lambda notification tests
+npm run test:watch # Frontend tests in watch mode
 ```
 
 ## Deployment
@@ -214,3 +214,42 @@ npm run test:watch # Tests in watch mode
 }
 ```
 Posted to AWS Lambda endpoint. Response may include `invoiceUrl` (Stripe hosted invoice link).
+
+## Payment notification (JRDO-94)
+
+After the Stripe block (and the DynamoDB Stripe-id update), `price-submission-handler` POSTs a payment notification for the Grok Bot routine "Payment plan / payment notification". The call has a 5 second timeout. A failure, non-2xx response, or timeout is logged and does not change the submission response. The response body is not logged.
+
+Leave these unset until rollout. A missing URL skips the call with one log line:
+
+- `PAY_NOTIFY_WEBHOOK_URL` — routine webhook URL
+- `PAY_NOTIFY_WEBHOOK_TOKEN` — sender key, sent as `Authorization: Bearer <token>`. A value that already starts with `Bearer ` is not prefixed again.
+- `PUMBLE_VIA_MAKE_ENABLED` — default `true` (also `1` / `yes`; set `false`, `0`, `no`, or `off` to skip). While true, `MAKE_WEBHOOK_URL` is still called with the raw submission so the Google Sheets row keeps running.
+
+Backing secret (do not commit values): `office-pricing/pay-notify-webhook` with keys `url` and `token`. Create it with `--profile engineering`. Deploy maps those keys onto the two webhook env vars above. `PUMBLE_VIA_MAKE_ENABLED` stays on after Pumble is removed, because Make still writes the sheet.
+
+`testMode` is true when `STRIPE_SECRET_KEY` starts with `sk_test_` or `rk_test_`.
+
+```javascript
+{
+  event: 'plan_selected' | 'payment_submitted', // plan and installment → plan_selected; full → payment_submitted
+  patientName,
+  paymentOption, // plan | installment | full
+  plan: { totalPrice, deposit, monthlyPayment, months, installments?, isSlidingScale, payoffDate },
+  amount, // deposit, or totalPrice when paymentOption is full
+  method, // plan → stripe_subscription_schedule; installment → stripe_scheduled_invoices; full → stripe_invoice
+  stripe: { customerId, invoiceId, invoiceUrl, subscriptionScheduleId, subscriptionId, futureInvoiceIds },
+  submissionId,
+  testMode,
+  timestamp // ISO UTC
+}
+```
+
+The same values are repeated on headers, because a routine webhook may drop the body: `X-Event-Type`, `X-Patient-Name` (URI-encoded), `X-Submission-Id`, `X-Stripe-Customer-Id`, `X-Stripe-Subscription-Id`, `X-Stripe-Invoice-Id`, `X-Amount`, `X-Payment-Option`.
+
+**Assumption for Matt / Finance:** `payment_submitted` is pay-in-full. Plan and installment submissions use `plan_selected`. There is no second ping when a payment later succeeds.
+
+### Rollout (after Matt approves — do not deploy from this change)
+
+1. Create `office-pricing/pay-notify-webhook` (`url`, `token`) with `--profile engineering`. Set `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN` on `price-submission-handler` from those keys. Leave `PUMBLE_VIA_MAKE_ENABLED` unset or `true`. Deploy the Lambda only after Matt confirms.
+2. Submit as a fake patient with Stripe test mode and no real customer. Confirm the routine receives the event.
+3. Make scenario **3819523** "Pricing Submission": snapshot the blueprint, then delete module **#4** (Pumble subscenario SCN_2036108, message `Pricing Submitted for {name}`) and link module #3 (Google Sheets) to module #2 (webhook respond). That Make edit is separate from this repo. The Lambda keeps calling Make so the sheet row continues.
