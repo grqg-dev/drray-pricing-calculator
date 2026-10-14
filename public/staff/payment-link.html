@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment link</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #FBF8F4;
+      --white: #fff;
+      --charcoal: #3D3833;
+      --deep: #9A6B62;
+      --border: #C4B8AE;
+      --error: #C62828;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--cream);
+      color: var(--charcoal);
+      line-height: 1.45;
+    }
+    main {
+      max-width: 32rem;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+    h1 {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 500;
+      font-size: 1.75rem;
+      margin: 0 0 0.35rem;
+    }
+    .lede { margin: 0 0 1.25rem; }
+    form, .result {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    label { display: block; font-weight: 600; margin: 0.9rem 0 0.35rem; }
+    label:first-child { margin-top: 0; }
+    input, select {
+      width: 100%;
+      min-height: 44px;
+      padding: 0.5rem 0.7rem;
+      font: inherit;
+      color: var(--charcoal);
+      background: var(--white);
+      border: 1px solid var(--charcoal);
+      border-radius: 6px;
+    }
+    .percents { display: flex; gap: 0.4rem; margin-top: 0.45rem; }
+    .percents button, button {
+      min-height: 44px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .percents button {
+      flex: 1;
+      background: var(--cream);
+      color: var(--charcoal);
+      border: 1px solid var(--charcoal);
+    }
+    .primary, .copy {
+      width: 100%;
+      margin-top: 1rem;
+      background: var(--deep);
+      color: white;
+      border: 0;
+    }
+    .primary:disabled, .copy:disabled { opacity: 0.6; cursor: default; }
+    .error { color: var(--error); font-weight: 600; margin: 0.75rem 0 0; }
+    .result { margin-top: 1rem; }
+    textarea {
+      width: 100%;
+      min-height: 6rem;
+      font: inherit;
+      color: var(--charcoal);
+      border: 1px solid var(--charcoal);
+      border-radius: 6px;
+      padding: 0.6rem;
+    }
+    .hint { margin: 0.75rem 0 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Payment link</h1>
+    <p class="lede">Create a link with the total and deposit already set. Send that link to the patient yourself. This page does not text or email anyone.</p>
+    <form id="form">
+      <label for="total">Total</label>
+      <input id="total" name="total" type="number" inputmode="numeric" min="1" step="1" value="6000" required>
+      <label for="deposit">Deposit</label>
+      <input id="deposit" name="deposit" type="number" inputmode="numeric" min="1" step="1" value="3000" required>
+      <div class="percents">
+        <button type="button" data-percent="0.1">10%</button>
+        <button type="button" data-percent="0.25">25%</button>
+        <button type="button" data-percent="0.5">50%</button>
+        <button type="button" data-percent="1">Full</button>
+      </div>
+      <p class="hint">Custom dates show up for the patient when the deposit is at least half the total.</p>
+      <label for="due">Due date, if you want it on the page</label>
+      <input id="due" name="due" type="date">
+      <label for="term">How long they can take to pay the rest</label>
+      <select id="term" name="term">
+        <option value="">9 months</option>
+        <option value="12">12 months</option>
+        <option value="true">18 months</option>
+      </select>
+      <label for="days">Link expires</label>
+      <select id="days" name="days">
+        <option value="">Never</option>
+        <option value="7">7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select>
+      <button class="primary" id="create" type="submit">Create link</button>
+      <p class="error" id="error" hidden></p>
+    </form>
+    <section class="result" id="result" hidden>
+      <label for="url">Link to send</label>
+      <textarea id="url" readonly></textarea>
+      <button class="copy" id="copy" type="button">Copy link</button>
+      <p class="hint">The patient picks monthly, every 2 months, every 3 months, or their own dates. When they submit, the deposit invoice is emailed to the address they enter.</p>
+    </section>
+  </main>
+  <script>
+    const API = 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
+    const form = document.getElementById('form');
+    const totalInput = document.getElementById('total');
+    const depositInput = document.getElementById('deposit');
+    const errorEl = document.getElementById('error');
+    const result = document.getElementById('result');
+    const urlBox = document.getElementById('url');
+    const createBtn = document.getElementById('create');
+
+    document.querySelectorAll('[data-percent]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const total = Number(totalInput.value);
+        if (!Number.isInteger(total) || total < 1) return;
+        depositInput.value = String(Math.round(total * Number(button.dataset.percent)));
+      });
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorEl.hidden = true;
+      createBtn.disabled = true;
+      const body = {
+        action: 'signLock',
+        maxPrice: Number(totalInput.value),
+        deposit: Number(depositInput.value),
+      };
+      const due = document.getElementById('due').value;
+      const term = document.getElementById('term').value;
+      const days = document.getElementById('days').value;
+      if (due) body.dueDate = due;
+      if (term) body.extended = term;
+      if (days) body.days = Number(days);
+      try {
+        const response = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.url) {
+          throw new Error(data.error || 'Could not create the link');
+        }
+        urlBox.value = data.url;
+        result.hidden = false;
+        urlBox.focus();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Could not create the link';
+        errorEl.hidden = false;
+      } finally {
+        createBtn.disabled = false;
+      }
+    });
+
+    document.getElementById('copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(urlBox.value);
+        document.getElementById('copy').textContent = 'Copied';
+      } catch {
+        urlBox.select();
+      }
+    });
+  </script>
+</body>
+</html>
