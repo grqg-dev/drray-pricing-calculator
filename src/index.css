@@ -616,6 +616,35 @@ body {
   flex-shrink: 0;
 }
 
+.deposit-locked {
+  justify-content: space-between;
+}
+
+.deposit-locked-amount {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--charcoal);
+}
+
+.lock-note {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--charcoal);
+}
+
+.price-section .lock-note {
+  margin: 4px 0 0;
+}
+
+.lock-status {
+  margin-top: 24px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--charcoal);
+}
+
 .deposit-buttons {
   display: flex;
   gap: 8px;

@@ -4,7 +4,7 @@
   "description": "Lambda function to handle price submissions with DynamoDB storage and make.com webhook",
   "main": "index.js",
   "scripts": {
-    "package": "rm -rf dist && mkdir -p dist && cp -r index.js node_modules dist && cd dist && zip -q -r function.zip .",
+    "package": "rm -rf dist && mkdir -p dist && cp -r index.js lock-link.js node_modules dist && cd dist && zip -q -r function.zip .",
     "deploy": "npm run package && aws lambda update-function-code --function-name price-submission-handler --zip-file fileb://dist/function.zip",
     "deploy:staging": "npm run package && aws lambda update-function-code --function-name price-submission-handler-staging --zip-file fileb://dist/function.zip"
   },

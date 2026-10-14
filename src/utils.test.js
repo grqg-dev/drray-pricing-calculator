@@ -1,4 +1,13 @@
+import { readFileSync } from 'fs'
 import { describe, it, expect } from 'vitest'
+import { createRequire } from 'module'
+import {
+  canonicalLockMessage as clientLockMessage,
+  parseLockQuery,
+  describeLockState,
+  signatureMatches,
+  isLockExpired,
+} from './lock'
 import {
   formatDate, formatCurrency, isValidEmail,
   parseDueDate, getOneMonthBefore, getPayoffDate, getFirstInvoiceDate,
@@ -527,6 +536,220 @@ describe('getMaxIntervalPayments', () => {
   it('always allows at least one payment', () => {
     expect(getMaxIntervalPayments({ intervalMonths: 2, maxMonths: 9, remainder: 100 })).toBe(1);
   });
+})
+
+const require = createRequire(import.meta.url)
+const {
+  canonicalLockMessage: apiLockMessage,
+  signLock,
+  verifyLockSignature,
+  gateLockedRequest,
+  buildLockedUrl,
+  PUBLIC_LOCK_ERROR,
+} = require('../api/lock-link.js')
+
+const LOCK_SECRET = 'test-lock-secret'
+
+describe('locked price links', () => {
+  it('uses the same signed message in the page and the Lambda', () => {
+    const fields = { maxPrice: 6000, deposit: 3000, exp: null }
+    expect(clientLockMessage(fields)).toBe('v1|6000|3000|')
+    expect(clientLockMessage(fields)).toBe(apiLockMessage(fields))
+    expect(clientLockMessage({ ...fields, exp: 1893456000 })).toBe('v1|6000|3000|1893456000')
+  })
+
+  it('signs a $6,000 total with a $3,000 deposit and locks the page', async () => {
+    const url = buildLockedUrl({
+      appUrl: 'https://payment-calculator.drjuliaray.com',
+      maxPrice: 6000,
+      deposit: 3000,
+      secret: LOCK_SECRET,
+    })
+    const query = parseLockQuery(url.slice(url.indexOf('?')))
+    expect(url).toContain('maxPrice=6000')
+    expect(url).toContain('deposit=3000')
+    expect(url).toContain('lock=1')
+    expect(verifyLockSignature(query, LOCK_SECRET).ok).toBe(true)
+    expect(await signatureMatches(query, LOCK_SECRET)).toBe(true)
+    expect(describeLockState(query, true)).toEqual({
+      mode: 'locked',
+      total: 6000,
+      deposit: 3000,
+      priceEditable: false,
+      depositEditable: false,
+      showPayInFull: false,
+      showScheduleCards: true,
+    })
+  })
+
+  it('shows pay in full only when the locked deposit is the whole total', () => {
+    const sig = signLock({ maxPrice: 6000, deposit: 6000, exp: null }, LOCK_SECRET)
+    const query = parseLockQuery(`?maxPrice=6000&deposit=6000&lock=1&sig=${sig}`)
+    expect(describeLockState(query, true)).toMatchObject({
+      mode: 'locked',
+      showPayInFull: true,
+      showScheduleCards: false,
+      depositEditable: false,
+    })
+  })
+
+  it('keeps a smaller locked deposit on the monthly slider', () => {
+    const state = describeLockState({
+      requested: true, maxPrice: 6000, deposit: 600, exp: null, sig: 'x',
+    }, true)
+    expect(state).toMatchObject({
+      mode: 'locked',
+      showPayInFull: false,
+      showScheduleCards: false,
+      priceEditable: false,
+      depositEditable: false,
+    })
+  })
+
+  it('leaves links without lock params open', () => {
+    const query = parseLockQuery('?maxPrice=6000&dueDate=2026-08-01')
+    expect(query.requested).toBe(false)
+    expect(describeLockState(query, false)).toMatchObject({
+      mode: 'open',
+      priceEditable: true,
+      depositEditable: true,
+      showPayInFull: true,
+    })
+  })
+
+  it('rejects a signed param that was edited', async () => {
+    const sig = signLock({ maxPrice: 6000, deposit: 3000, exp: null }, LOCK_SECRET)
+    const cases = [
+      `?maxPrice=1000&deposit=3000&lock=1&sig=${sig}`,
+      `?maxPrice=6000&deposit=1000&lock=1&sig=${sig}`,
+      `?maxPrice=6000&deposit=3000&lock=1&exp=1893456000&sig=${sig}`,
+      `?maxPrice=6000&deposit=3000&lock=1&sig=${sig}x`,
+    ]
+    for (const search of cases) {
+      const query = parseLockQuery(search)
+      expect(verifyLockSignature(query, LOCK_SECRET).ok).toBe(false)
+      expect(describeLockState(query, false).mode).toBe('invalid')
+    }
+    const query = parseLockQuery(`?maxPrice=6000&deposit=1000&lock=1&sig=${sig}`)
+    expect(await signatureMatches({ ...query, maxPrice: 6000, deposit: 3000 }, LOCK_SECRET)).toBe(true)
+    expect(await signatureMatches(query, LOCK_SECRET)).toBe(false)
+  })
+
+  it('rejects an expired link and ignores unsigned due dates', () => {
+    const exp = Math.floor(Date.now() / 1000) - 60
+    const url = buildLockedUrl({
+      appUrl: 'https://payment-calculator.drjuliaray.com',
+      maxPrice: 6000,
+      deposit: 3000,
+      exp,
+      dueDate: '2026-08-01',
+      secret: LOCK_SECRET,
+    })
+    const query = parseLockQuery(url.slice(url.indexOf('?')))
+    expect(isLockExpired(exp)).toBe(true)
+    expect(verifyLockSignature(query, LOCK_SECRET).reason).toBe('expired')
+
+    const fresh = buildLockedUrl({
+      appUrl: 'https://payment-calculator.drjuliaray.com',
+      maxPrice: 6000,
+      deposit: 3000,
+      dueDate: '2026-08-01',
+      extended: '12',
+      secret: LOCK_SECRET,
+    })
+    const edited = fresh.replace('dueDate=2026-08-01', 'dueDate=2026-01-01').replace('extended=12', 'extended=true')
+    expect(verifyLockSignature(parseLockQuery(edited.slice(edited.indexOf('?'))), LOCK_SECRET).ok).toBe(true)
+  })
+
+  it('rejects a mismatched locked submission before it would be accepted', () => {
+    const sig = signLock({ maxPrice: 6000, deposit: 3000, exp: null }, LOCK_SECRET)
+    const lock = { maxPrice: 6000, deposit: 3000, sig }
+    const mismatched = gateLockedRequest({
+      name: 'Test Patient',
+      email: 'mattdennis-info@agentmail.to',
+      totalPrice: 1000,
+      deposit: 300,
+      paymentOption: 'plan',
+      months: 6,
+      monthlyPayment: 500,
+      lock,
+    }, LOCK_SECRET)
+    expect(mismatched).toMatchObject({
+      type: 'reject',
+      statusCode: 400,
+      reason: 'total',
+      body: { error: PUBLIC_LOCK_ERROR },
+    })
+
+    const shortSchedule = gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 3000,
+      paymentOption: 'installment',
+      installments: [{ amount: 1000, dueDate: '2026-08-01' }],
+      lock,
+    }, LOCK_SECRET)
+    expect(shortSchedule.reason).toBe('remainder')
+
+    const payInFull = gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 6000,
+      paymentOption: 'full',
+      lock,
+    }, LOCK_SECRET)
+    expect(payInFull.reason).toBe('pay-in-full')
+  })
+
+  it('accepts a locked plan whose remainder matches, and still accepts unsigned submissions', () => {
+    const sig = signLock({ maxPrice: 6000, deposit: 3000, exp: null }, LOCK_SECRET)
+    const lock = { maxPrice: 6000, deposit: 3000, sig }
+    expect(gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 3000,
+      paymentOption: 'plan',
+      months: 6,
+      monthlyPayment: 500,
+      lock,
+    }, LOCK_SECRET)).toMatchObject({ type: 'continue', locked: true })
+
+    expect(gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 3000,
+      paymentOption: 'installment',
+      installments: [
+        { amount: 1500, dueDate: '2026-08-01' },
+        { amount: 1500, dueDate: '2026-10-01' },
+      ],
+      lock,
+    }, LOCK_SECRET).type).toBe('continue')
+
+    expect(gateLockedRequest({
+      totalPrice: 1000,
+      deposit: 100,
+      paymentOption: 'plan',
+      months: 3,
+      monthlyPayment: 300,
+    }, LOCK_SECRET)).toEqual({ type: 'continue', locked: false })
+  })
+
+  it('checks a lock in the handler before DynamoDB or Stripe', () => {
+    const source = readFileSync(new URL('../api/index.js', import.meta.url), 'utf8')
+    const gateAt = source.indexOf('gateLockedRequest')
+    const dynamoAt = source.indexOf('dynamodb.put')
+    const stripeAt = source.indexOf('createStripeInvoice')
+    expect(gateAt).toBeGreaterThan(0)
+    expect(gateAt).toBeLessThan(dynamoAt)
+    expect(gateAt).toBeLessThan(stripeAt)
+  })
+
+  it('answers verifyLock without treating it as a submission', () => {
+    const sig = signLock({ maxPrice: 6000, deposit: 3000, exp: null }, LOCK_SECRET)
+    expect(gateLockedRequest({
+      action: 'verifyLock', maxPrice: 6000, deposit: 3000, sig,
+    }, LOCK_SECRET)).toEqual({ type: 'verify', statusCode: 200, body: { valid: true } })
+    expect(gateLockedRequest({
+      action: 'verifyLock', maxPrice: 1000, deposit: 3000, sig,
+    }, LOCK_SECRET)).toEqual({ type: 'verify', statusCode: 200, body: { valid: false } })
+  })
 })
 
 describe('buildIntervalInstallments', () => {
