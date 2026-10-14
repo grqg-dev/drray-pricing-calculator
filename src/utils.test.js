@@ -741,6 +741,40 @@ describe('locked price links', () => {
     expect(gateAt).toBeLessThan(stripeAt)
   })
 
+  it('mints a patient link the live page will accept', () => {
+    const gate = gateLockedRequest({
+      action: 'signLock',
+      maxPrice: 6000,
+      deposit: 3000,
+      dueDate: '2026-08-01',
+      extended: '12',
+      appUrl: 'https://evil.example',
+    }, LOCK_SECRET)
+    expect(gate.statusCode).toBe(200)
+    expect(gate.body.url.startsWith('https://payment-calculator.drjuliaray.com/?')).toBe(true)
+    expect(gate.body.url).toContain('dueDate=2026-08-01')
+    expect(gate.body.url).toContain('extended=12')
+    expect(gate.body.url).not.toContain('evil.example')
+    const query = parseLockQuery(gate.body.url.slice(gate.body.url.indexOf('?')))
+    expect(verifyLockSignature(query, LOCK_SECRET).ok).toBe(true)
+    expect(describeLockState(query, true)).toMatchObject({
+      mode: 'locked',
+      total: 6000,
+      deposit: 3000,
+      showPayInFull: false,
+      showScheduleCards: true,
+    })
+  })
+
+  it('refuses a deposit above the total and a missing signing secret', () => {
+    expect(gateLockedRequest({
+      action: 'signLock', maxPrice: 6000, deposit: 9000,
+    }, LOCK_SECRET).statusCode).toBe(400)
+    expect(gateLockedRequest({
+      action: 'signLock', maxPrice: 6000, deposit: 3000,
+    }, '').statusCode).toBe(500)
+  })
+
   it('answers verifyLock without treating it as a submission', () => {
     const sig = signLock({ maxPrice: 6000, deposit: 3000, exp: null }, LOCK_SECRET)
     expect(gateLockedRequest({
