@@ -793,6 +793,66 @@ describe('locked price links', () => {
     }, LOCK_SECRET).statusCode).toBe(400)
   })
 
+  it('lets the patient choose the deposit while the total stays locked', async () => {
+    const gate = gateLockedRequest({
+      action: 'signLock', maxPrice: 6000, depositOpen: true,
+    }, LOCK_SECRET)
+    expect(gate.statusCode).toBe(200)
+    expect(gate.body.url).toContain('maxPrice=6000')
+    expect(gate.body.url).toContain('lock=1')
+    expect(gate.body.url).not.toContain('deposit=')
+    expect(clientLockMessage({ maxPrice: 6000, depositOpen: true, exp: null })).toBe('v2|6000||')
+    expect(clientLockMessage({ maxPrice: 6000, depositOpen: true, exp: null })).toBe(apiLockMessage({ maxPrice: 6000, depositOpen: true, exp: null }))
+
+    const query = parseLockQuery(gate.body.url.slice(gate.body.url.indexOf('?')))
+    expect(query.depositOpen).toBe(true)
+    expect(verifyLockSignature({ ...query, depositOpen: true }, LOCK_SECRET).ok).toBe(true)
+    expect(await signatureMatches(query, LOCK_SECRET)).toBe(true)
+    expect(describeLockState(query, true)).toMatchObject({
+      mode: 'locked',
+      total: 6000,
+      deposit: null,
+      priceEditable: false,
+      depositEditable: true,
+      showPayInFull: true,
+    })
+
+    const lock = { maxPrice: 6000, depositOpen: true, sig: query.sig }
+    expect(gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 1500,
+      paymentOption: 'plan',
+      months: 6,
+      monthlyPayment: 750,
+      lock,
+    }, LOCK_SECRET)).toMatchObject({ type: 'continue', locked: true })
+    expect(gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 6000,
+      paymentOption: 'full',
+      lock,
+    }, LOCK_SECRET).type).toBe('continue')
+    expect(gateLockedRequest({
+      totalPrice: 6000,
+      deposit: 7000,
+      paymentOption: 'plan',
+      months: 1,
+      monthlyPayment: 1,
+      lock,
+    }, LOCK_SECRET).reason).toBe('deposit')
+    expect(gateLockedRequest({
+      totalPrice: 5000,
+      deposit: 1500,
+      paymentOption: 'plan',
+      months: 6,
+      monthlyPayment: 750,
+      lock,
+    }, LOCK_SECRET).reason).toBe('total')
+
+    const addedDeposit = `${gate.body.url}&deposit=1000`
+    expect(verifyLockSignature(parseLockQuery(addedDeposit.slice(addedDeposit.indexOf('?'))), LOCK_SECRET).ok).toBe(false)
+  })
+
   it('answers verifyLock without treating it as a submission', () => {
     const sig = signLock({ maxPrice: 6000, deposit: 3000, exp: null }, LOCK_SECRET)
     expect(gateLockedRequest({

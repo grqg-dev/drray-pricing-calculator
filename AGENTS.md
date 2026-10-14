@@ -118,16 +118,16 @@ All pure business logic in `src/utils.js` is tested (36 tests):
 - **`extended=12`** — Allow up to 12 months (default: 9)
 - **`maxPrice=10000`** — Override default fixed price ($10,000)
 - **`preview=done`** — Show success screen with sample data
-- **`deposit=3000`** — With `lock=1` and `sig`, the agreed deposit in whole dollars
-- **`lock=1`** — Lock the total and deposit. Requires a valid `sig`
+- **`deposit=3000`** — With `lock=1` and `sig`, the agreed deposit in whole dollars. Omit it to lock only the total.
+- **`lock=1`** — Lock the total, and the deposit when `deposit` is present. Requires a valid `sig`
 - **`exp`** — Optional unix expiry, included in the signature
-- **`sig`** — HMAC-SHA256 of `v1|maxPrice|deposit|exp`, base64url
+- **`sig`** — HMAC-SHA256 of `v1|maxPrice|deposit|exp` when the deposit is locked, or `v2|maxPrice||exp` when the patient chooses it, base64url
 
 `dueDate` and `extended` can be added to a locked link and are not signed. Links without `lock=1` behave as before: `deposit`, `exp`, and `sig` are ignored.
 
 ### Locked patient links
 
-Staff mint a link from [the payment link page](https://payment-calculator.drjuliaray.com/staff/payment-link.html) (also linked on the services dashboard). Enter the total and deposit, then copy the link and send it to the patient yourself. The page does not text or email anyone. The patient opens it, picks how to pay the rest, and the deposit invoice goes to the email they enter.
+Staff mint a link from [the payment link page](https://payment-calculator.drjuliaray.com/staff/payment-link.html) (also linked on the services dashboard). Enter the total and deposit, then copy the link and send it to the patient yourself. Check "Let the patient choose the deposit" to lock only the total; the patient then picks 10%, 25%, 50%, or a custom amount. The page does not text or email anyone. The patient opens it, picks how to pay the rest, and the deposit invoice goes to the email they enter.
 
 The same link can be minted from the shell. The secret never goes in the page bundle:
 
@@ -136,9 +136,9 @@ PRICE_LOCK_SECRET=... node scripts/generate-locked-price-link.js --total 6000 --
 PRICE_LOCK_SECRET=... node scripts/generate-locked-price-link.js --total 6000 --deposit 3000 --due-date 2026-08-01 --extended 12 --days 30
 ```
 
-The page shows the total and deposit read-only, hides "Pay in full" unless the deposit is the whole total, and shows the schedule cards when the deposit is at least 50%. A bad signature shows an error instead of the open calculator.
+When the deposit is locked, the page shows the total and deposit read-only, hides "Pay in full" unless the deposit is the whole total, and shows the schedule cards when the deposit is at least 50%. When the deposit is open, the total stays read-only and the deposit controls match the open calculator. A bad signature shows an error instead of the open calculator.
 
-The Lambda checks `lock` before DynamoDB, Make, or Stripe. `action: "verifyLock"` only reports `{ valid: true|false }`. A submission whose total or deposit doesn't match the signature returns 400 and creates nothing. Unsigned submissions are unchanged.
+The Lambda checks `lock` before DynamoDB, Make, or Stripe. `action: "verifyLock"` only reports `{ valid: true|false }`. A submission whose total doesn't match the signature returns 400 and creates nothing. A locked deposit must match too. An open deposit must be a whole-dollar amount from $1 through the total, and the remainder must still add up. Unsigned submissions are unchanged.
 
 Set `PRICE_LOCK_SECRET` on `price-submission-handler` before using locked links in production. Leave `VITE_PRICE_LOCK_SECRET` unset on Amplify so the secret stays on the Lambda. Deploy the Lambda before the page that calls `verifyLock`. Do not deploy either to production without Matt's confirmation.
 

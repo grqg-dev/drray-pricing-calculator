@@ -4,19 +4,21 @@ const PUBLIC_LOCK_ERROR = 'This payment link is not valid';
 
 /**
  * Signed field string. dueDate and extended are intentionally omitted.
- * v1|<maxPrice>|<deposit>|<exp or empty>
+ * Locked deposit: v1|<maxPrice>|<deposit>|<exp or empty>
+ * Patient picks the deposit: v2|<maxPrice>||<exp or empty>
  */
-function canonicalLockMessage({ maxPrice, deposit, exp }) {
+function canonicalLockMessage({ maxPrice, deposit, exp, depositOpen = false }) {
   if (!Number.isInteger(maxPrice) || maxPrice <= 0) {
     throw new Error('invalid maxPrice');
-  }
-  if (!Number.isInteger(deposit) || deposit <= 0 || deposit > maxPrice) {
-    throw new Error('invalid deposit');
   }
   let expPart = '';
   if (exp != null && exp !== '') {
     if (!Number.isInteger(exp) || exp <= 0) throw new Error('invalid exp');
     expPart = String(exp);
+  }
+  if (depositOpen) return `v2|${maxPrice}||${expPart}`;
+  if (!Number.isInteger(deposit) || deposit <= 0 || deposit > maxPrice) {
+    throw new Error('invalid deposit');
   }
   return `v1|${maxPrice}|${deposit}|${expPart}`;
 }
@@ -33,14 +35,22 @@ function signaturesMatch(expected, actual) {
   return crypto.timingSafeEqual(a, b);
 }
 
+function lockAmounts(fields) {
+  const depositOpen = fields.depositOpen === true;
+  return {
+    maxPrice: fields.maxPrice,
+    deposit: depositOpen ? null : fields.deposit,
+    depositOpen,
+    exp: fields.exp ?? null,
+  };
+}
+
 function verifyLockSignature(fields, secret, now = Date.now()) {
   if (!secret || !fields) return { ok: false, reason: 'config', error: PUBLIC_LOCK_ERROR };
+  const amounts = lockAmounts(fields);
   let expected;
   try {
-    expected = signLock(
-      { maxPrice: fields.maxPrice, deposit: fields.deposit, exp: fields.exp ?? null },
-      secret,
-    );
+    expected = signLock(amounts, secret);
   } catch {
     return { ok: false, reason: 'params', error: PUBLIC_LOCK_ERROR };
   }
@@ -52,12 +62,7 @@ function verifyLockSignature(fields, secret, now = Date.now()) {
       return { ok: false, reason: 'expired', error: PUBLIC_LOCK_ERROR };
     }
   }
-  return {
-    ok: true,
-    maxPrice: fields.maxPrice,
-    deposit: fields.deposit,
-    exp: fields.exp ?? null,
-  };
+  return { ok: true, ...amounts };
 }
 
 function reject(reason) {
@@ -83,16 +88,23 @@ function validateLockedSubmission(payload, secret, now = Date.now()) {
 
   if (payload.totalPrice !== verified.maxPrice) return reject('total');
 
-  if (payload.paymentOption === 'full') {
-    if (verified.deposit !== verified.maxPrice || payload.deposit !== verified.maxPrice) {
-      return reject('pay-in-full');
+  const deposit = verified.depositOpen ? payload.deposit : verified.deposit;
+  if (verified.depositOpen) {
+    if (!Number.isInteger(deposit) || deposit <= 0 || deposit > verified.maxPrice) {
+      return reject('deposit');
     }
-    return { ok: true, locked: true, maxPrice: verified.maxPrice, deposit: verified.deposit };
   }
 
-  if (payload.deposit !== verified.deposit) return reject('deposit');
+  if (payload.paymentOption === 'full') {
+    if (deposit !== verified.maxPrice || payload.deposit !== verified.maxPrice) {
+      return reject('pay-in-full');
+    }
+    return { ok: true, locked: true, maxPrice: verified.maxPrice, deposit };
+  }
 
-  const remainder = verified.maxPrice - verified.deposit;
+  if (payload.deposit !== deposit) return reject('deposit');
+
+  const remainder = verified.maxPrice - deposit;
   if (payload.paymentOption === 'installment') {
     if (!Array.isArray(payload.installments) || payload.installments.length === 0) {
       return reject('schedule');
@@ -107,7 +119,7 @@ function validateLockedSubmission(payload, secret, now = Date.now()) {
     return reject('option');
   }
 
-  return { ok: true, locked: true, maxPrice: verified.maxPrice, deposit: verified.deposit };
+  return { ok: true, locked: true, maxPrice: verified.maxPrice, deposit };
 }
 
 const CALCULATOR_APP_URL = 'https://payment-calculator.drjuliaray.com';
@@ -116,7 +128,8 @@ const ALLOWED_EXTENDED = new Set(['3', '6', '12', 'true']);
 function signLockedLink(payload, secret, now = Date.now()) {
   if (!secret) return { ok: false, status: 500, error: 'Link signing is not configured' };
   const maxPrice = Number(payload && payload.maxPrice);
-  const deposit = Number(payload && payload.deposit);
+  const depositOpen = Boolean(payload && payload.depositOpen);
+  const deposit = depositOpen ? null : Number(payload && payload.deposit);
   let exp = null;
   if (payload && payload.days != null && payload.days !== '' && Number(payload.days) !== 0) {
     const days = Number(payload.days);
@@ -138,6 +151,7 @@ function signLockedLink(payload, secret, now = Date.now()) {
       appUrl: CALCULATOR_APP_URL,
       maxPrice,
       deposit,
+      depositOpen,
       exp,
       dueDate,
       extended,
@@ -145,7 +159,13 @@ function signLockedLink(payload, secret, now = Date.now()) {
     });
     return { ok: true, url };
   } catch {
-    return { ok: false, status: 400, error: 'Enter a total and a deposit that does not exceed it' };
+    return {
+      ok: false,
+      status: 400,
+      error: depositOpen
+        ? 'Enter a total greater than 0'
+        : 'Enter a total and a deposit that does not exceed it',
+    };
   }
 }
 
@@ -171,11 +191,11 @@ function gateLockedRequest(payload, secret, now = Date.now()) {
   return { type: 'continue', locked: check.locked === true };
 }
 
-function buildLockedUrl({ appUrl, maxPrice, deposit, exp = null, dueDate, extended, secret }) {
-  const sig = signLock({ maxPrice, deposit, exp }, secret);
+function buildLockedUrl({ appUrl, maxPrice, deposit, depositOpen = false, exp = null, dueDate, extended, secret }) {
+  const sig = signLock({ maxPrice, deposit, depositOpen, exp }, secret);
   const params = new URLSearchParams();
   params.set('maxPrice', String(maxPrice));
-  params.set('deposit', String(deposit));
+  if (!depositOpen) params.set('deposit', String(deposit));
   params.set('lock', '1');
   if (exp) params.set('exp', String(exp));
   if (dueDate) params.set('dueDate', dueDate);

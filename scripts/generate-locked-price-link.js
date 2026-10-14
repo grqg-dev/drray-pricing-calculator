@@ -3,6 +3,7 @@
  * Mint a patient payment-calculator link with a signed, locked total and deposit.
  *
  *   PRICE_LOCK_SECRET=... node scripts/generate-locked-price-link.js --total 6000 --deposit 3000
+ *   node scripts/generate-locked-price-link.js --total 6000 --open-deposit
  *   node scripts/generate-locked-price-link.js --total 6000 --deposit 3000 --due-date 2026-08-01 --extended 12 --days 30
  *
  * The secret is PRICE_LOCK_SECRET, or the price-submission-handler Lambda env var of the same name.
@@ -40,11 +41,12 @@ function secretFromLambda() {
 function usage() {
   console.log(`Usage:
   node scripts/generate-locked-price-link.js --total 6000 --deposit 3000
+  node scripts/generate-locked-price-link.js --total 6000 --open-deposit
   node scripts/generate-locked-price-link.js --total 6000 --deposit 3000 --due-date 2026-08-01 --extended 12
   node scripts/generate-locked-price-link.js --total 6000 --deposit 3000 --days 30
 
 Requires PRICE_LOCK_SECRET (env, or price-submission-handler Lambda).
-Optional: --app-url, --due-date YYYY-MM-DD, --extended 3|6|12|true, --days N`);
+Optional: --open-deposit, --app-url, --due-date YYYY-MM-DD, --extended 3|6|12|true, --days N`);
 }
 
 function main() {
@@ -55,6 +57,7 @@ function main() {
   }
 
   const total = Number(readFlag(args, '--total'));
+  const depositOpen = args.includes('--open-deposit');
   const deposit = Number(readFlag(args, '--deposit'));
   const dueDate = readFlag(args, '--due-date');
   const extended = readFlag(args, '--extended');
@@ -65,7 +68,7 @@ function main() {
     console.error('Error: --total must be a whole dollar amount greater than 0');
     process.exit(1);
   }
-  if (!Number.isInteger(deposit) || deposit <= 0 || deposit > total) {
+  if (!depositOpen && (!Number.isInteger(deposit) || deposit <= 0 || deposit > total)) {
     console.error('Error: --deposit must be a whole dollar amount from 1 through the total');
     process.exit(1);
   }
@@ -97,7 +100,8 @@ function main() {
   const url = buildLockedUrl({
     appUrl,
     maxPrice: total,
-    deposit,
+    deposit: depositOpen ? null : deposit,
+    depositOpen,
     exp,
     dueDate: dueDate || undefined,
     extended: extended || undefined,
@@ -105,7 +109,7 @@ function main() {
   });
 
   console.log(`Total: $${total.toLocaleString('en-US')}`);
-  console.log(`Deposit: $${deposit.toLocaleString('en-US')}`);
+  console.log(depositOpen ? 'Deposit: patient chooses' : `Deposit: $${deposit.toLocaleString('en-US')}`);
   console.log(exp ? `Expires: ${new Date(exp * 1000).toISOString()}` : 'Expires: never');
   console.log(url);
 }

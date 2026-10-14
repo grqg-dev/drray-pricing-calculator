@@ -4,19 +4,21 @@ export const LOCK_PAGE_ERROR = "This payment link isn't valid. Ask the office fo
 
 /**
  * Same string as api/lock-link.js canonicalLockMessage.
- * v1|<maxPrice>|<deposit>|<exp or empty>
+ * Locked deposit: v1|<maxPrice>|<deposit>|<exp or empty>
+ * Patient picks the deposit: v2|<maxPrice>||<exp or empty>
  */
-export function canonicalLockMessage({ maxPrice, deposit, exp }) {
+export function canonicalLockMessage({ maxPrice, deposit, exp, depositOpen = false }) {
   if (!Number.isInteger(maxPrice) || maxPrice <= 0) {
     throw new Error('invalid maxPrice');
-  }
-  if (!Number.isInteger(deposit) || deposit <= 0 || deposit > maxPrice) {
-    throw new Error('invalid deposit');
   }
   let expPart = '';
   if (exp != null && exp !== '') {
     if (!Number.isInteger(exp) || exp <= 0) throw new Error('invalid exp');
     expPart = String(exp);
+  }
+  if (depositOpen) return `v2|${maxPrice}||${expPart}`;
+  if (!Number.isInteger(deposit) || deposit <= 0 || deposit > maxPrice) {
+    throw new Error('invalid deposit');
   }
   return `v1|${maxPrice}|${deposit}|${expPart}`;
 }
@@ -27,14 +29,16 @@ export function parseLockQuery(search) {
   if (params.get('lock') !== '1') return { requested: false };
 
   const maxPrice = Number(params.get('maxPrice'));
-  const deposit = Number(params.get('deposit'));
+  const depositOpen = !params.has('deposit');
+  const deposit = depositOpen ? null : Number(params.get('deposit'));
   const expRaw = params.get('exp');
   const expNumber = expRaw == null || expRaw === '' ? null : Number(expRaw);
 
   return {
     requested: true,
     maxPrice: Number.isInteger(maxPrice) ? maxPrice : null,
-    deposit: Number.isInteger(deposit) ? deposit : null,
+    deposit: !depositOpen && Number.isInteger(deposit) ? deposit : null,
+    depositOpen,
     exp: expNumber == null ? null : (Number.isInteger(expNumber) ? expNumber : null),
     sig: params.get('sig') || '',
   };
@@ -61,7 +65,29 @@ export function describeLockState(query, signatureValid) {
     };
   }
 
-  const amountsOk = Number.isInteger(query.maxPrice)
+  const priceOk = Number.isInteger(query.maxPrice) && query.maxPrice > 0;
+  if (query.depositOpen) {
+    if (!signatureValid || !priceOk) {
+      return {
+        mode: 'invalid',
+        priceEditable: false,
+        depositEditable: false,
+        showPayInFull: false,
+        showScheduleCards: false,
+      };
+    }
+    return {
+      mode: 'locked',
+      total: query.maxPrice,
+      deposit: null,
+      priceEditable: false,
+      depositEditable: true,
+      showPayInFull: true,
+      showScheduleCards: false,
+    };
+  }
+
+  const amountsOk = priceOk
     && Number.isInteger(query.deposit)
     && query.deposit > 0
     && query.deposit <= query.maxPrice;
@@ -122,7 +148,7 @@ export async function verifyLockRemote(fields, url = SUBMISSION_API_URL) {
     body: JSON.stringify({
       action: 'verifyLock',
       maxPrice: fields.maxPrice,
-      deposit: fields.deposit,
+      ...(fields.depositOpen ? { depositOpen: true } : { deposit: fields.deposit }),
       ...(fields.exp ? { exp: fields.exp } : {}),
       sig: fields.sig,
     }),

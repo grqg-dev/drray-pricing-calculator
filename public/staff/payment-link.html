@@ -44,7 +44,7 @@
     }
     label { display: block; font-weight: 600; margin: 0.9rem 0 0.35rem; }
     label:first-child { margin-top: 0; }
-    input, select {
+    input:not([type="checkbox"]), select {
       width: 100%;
       min-height: 44px;
       padding: 0.5rem 0.7rem;
@@ -88,24 +88,44 @@
       padding: 0.6rem;
     }
     .hint { margin: 0.75rem 0 0; }
+    .check {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-weight: 600;
+      margin-top: 1rem;
+    }
+    .check input {
+      width: 1.25rem;
+      height: 1.25rem;
+      margin-top: 0.15rem;
+      flex: 0 0 auto;
+    }
   </style>
 </head>
 <body>
   <main>
     <h1>Payment link</h1>
-    <p class="lede">Create a link with the total and deposit already set. Send that link to the patient yourself. This page does not text or email anyone.</p>
+    <p class="lede">Create a link with the total already set. The deposit stays locked unless you let the patient choose it. Send that link yourself. This page does not text or email anyone.</p>
     <form id="form">
       <label for="total">Total</label>
       <input id="total" name="total" type="number" inputmode="numeric" min="1" step="1" value="6000" required>
-      <label for="deposit">Deposit</label>
-      <input id="deposit" name="deposit" type="number" inputmode="numeric" min="1" step="1" value="3000" required>
-      <div class="percents">
-        <button type="button" data-percent="0.1">10%</button>
-        <button type="button" data-percent="0.25">25%</button>
-        <button type="button" data-percent="0.5">50%</button>
-        <button type="button" data-percent="1">Full</button>
+      <label class="check" for="unlock-deposit">
+        <input id="unlock-deposit" name="unlock-deposit" type="checkbox">
+        Let the patient choose the deposit
+      </label>
+      <div id="deposit-fields">
+        <label for="deposit">Deposit</label>
+        <input id="deposit" name="deposit" type="number" inputmode="numeric" min="1" step="1" value="3000" required>
+        <div class="percents">
+          <button type="button" data-percent="0.1">10%</button>
+          <button type="button" data-percent="0.25">25%</button>
+          <button type="button" data-percent="0.5">50%</button>
+          <button type="button" data-percent="1">Full</button>
+        </div>
+        <p class="hint">Custom dates show up for the patient when the deposit is at least half the total.</p>
       </div>
-      <p class="hint">Custom dates show up for the patient when the deposit is at least half the total.</p>
+      <p class="hint" id="open-hint" hidden>The patient picks 10%, 25%, 50%, or their own amount, the same as the open calculator. The total stays fixed. Custom dates show up if they put down at least half.</p>
       <label for="due">Due date, if you want it on the page</label>
       <input id="due" name="due" type="date">
       <label for="term">How long they can take to pay the rest</label>
@@ -130,7 +150,7 @@
       <label for="url">Link to send</label>
       <textarea id="url" readonly></textarea>
       <button class="copy" id="copy" type="button">Copy link</button>
-      <p class="hint">The patient picks monthly, every 2 months, every 3 months, or their own dates. When they submit, the deposit invoice is emailed to the address they enter.</p>
+      <p class="hint" id="result-hint">The patient picks monthly, every 2 months, every 3 months, or their own dates. When they submit, the deposit invoice is emailed to the address they enter.</p>
     </section>
   </main>
   <script>
@@ -138,10 +158,21 @@
     const form = document.getElementById('form');
     const totalInput = document.getElementById('total');
     const depositInput = document.getElementById('deposit');
+    const unlockDeposit = document.getElementById('unlock-deposit');
+    const depositFields = document.getElementById('deposit-fields');
+    const openHint = document.getElementById('open-hint');
     const errorEl = document.getElementById('error');
     const result = document.getElementById('result');
     const urlBox = document.getElementById('url');
     const createBtn = document.getElementById('create');
+
+    function syncDepositChoice() {
+      const open = unlockDeposit.checked;
+      depositFields.hidden = open;
+      openHint.hidden = !open;
+      depositInput.required = !open;
+    }
+    unlockDeposit.addEventListener('change', syncDepositChoice);
 
     document.querySelectorAll('[data-percent]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -155,10 +186,11 @@
       event.preventDefault();
       errorEl.hidden = true;
       createBtn.disabled = true;
+      const depositOpen = unlockDeposit.checked;
       const body = {
         action: 'signLock',
         maxPrice: Number(totalInput.value),
-        deposit: Number(depositInput.value),
+        ...(depositOpen ? { depositOpen: true } : { deposit: Number(depositInput.value) }),
       };
       const due = document.getElementById('due').value;
       const term = document.getElementById('term').value;
@@ -177,6 +209,9 @@
           throw new Error(data.error || 'Could not create the link');
         }
         urlBox.value = data.url;
+        document.getElementById('result-hint').textContent = depositOpen
+          ? 'The patient chooses the deposit, then how to pay the rest. When they submit, the deposit invoice is emailed to the address they enter.'
+          : 'The patient picks monthly, every 2 months, every 3 months, or their own dates. When they submit, the deposit invoice is emailed to the address they enter.';
         result.hidden = false;
         urlBox.focus();
       } catch (err) {

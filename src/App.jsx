@@ -457,11 +457,12 @@ function App() {
   // Derived values
   const priceLocked = lockStatus === 'locked';
   const lockView = describeLockState(lockQuery, priceLocked);
+  const depositLocked = priceLocked && !lockView.depositEditable;
   const effectiveSliding = isSlidingScale && !priceLocked;
   const totalPrice = priceLocked ? lockQuery.maxPrice : (isSlidingScale ? selectedPrice : FIXED_PRICE);
   const payoffDate = getPayoffDate(termMonths);
   const minDepositAmount = calculateMinDeposit(totalPrice, effectiveSliding);
-  const deposit = priceLocked
+  const deposit = depositLocked
     ? lockQuery.deposit
     : calculateDeposit({ customDeposit, minDepositAmount, totalPrice, depositPercent });
   const remainder = totalPrice - deposit;
@@ -492,9 +493,9 @@ function App() {
   const monthlyWarnings = getWarnings({
     customDeposit, minDepositAmount, deposit, totalPrice, isSlidingScale, monthlyPayment, dueDate, payoffDate,
   });
-  const depositBelowMin = priceLocked ? false : monthlyWarnings.depositBelowMin;
-  const depositBelowPercent = priceLocked ? false : monthlyWarnings.depositBelowPercent;
-  const depositExceedsTotal = priceLocked ? false : monthlyWarnings.depositExceedsTotal;
+  const depositBelowMin = depositLocked ? false : monthlyWarnings.depositBelowMin;
+  const depositBelowPercent = depositLocked ? false : monthlyWarnings.depositBelowPercent;
+  const depositExceedsTotal = depositLocked ? false : monthlyWarnings.depositExceedsTotal;
   const pastDueDate = useInstallments ? scheduleValidation.pastDueDate : monthlyWarnings.pastDueDate;
   const belowMinPayment = useInstallments ? scheduleValidation.belowMinPayment : monthlyWarnings.belowMinPayment;
   const hasWarning = depositBelowMin || depositBelowPercent || depositExceedsTotal
@@ -532,7 +533,7 @@ function App() {
 
   // Typical payment; uneven splits differ by $1, and the date list shows exact amounts
   const chosenOption = paymentOption;
-  const activePaymentOption = priceLocked && chosenOption === null
+  const activePaymentOption = depositLocked && chosenOption === null
     ? (lockQuery.deposit === lockQuery.maxPrice ? 'full' : 'plan')
     : chosenOption;
 
@@ -657,12 +658,12 @@ function App() {
       originalPrice: originalPrice || null,
       isExtended,
       timestamp: new Date().toISOString(),
-      depositPercent: activePaymentOption !== 'full' && customDeposit === null && !priceLocked ? depositPercent : null,
-      customDeposit: activePaymentOption !== 'full' && customDeposit !== null && !priceLocked ? customDeposit : null,
+      depositPercent: activePaymentOption !== 'full' && customDeposit === null && !depositLocked ? depositPercent : null,
+      customDeposit: activePaymentOption !== 'full' && customDeposit !== null && !depositLocked ? customDeposit : null,
       ...(priceLocked && {
         lock: {
           maxPrice: lockQuery.maxPrice,
-          deposit: lockQuery.deposit,
+          ...(lockQuery.depositOpen ? { depositOpen: true } : { deposit: lockQuery.deposit }),
           ...(lockQuery.exp ? { exp: lockQuery.exp } : {}),
           sig: lockQuery.sig,
         },
@@ -834,7 +835,7 @@ function App() {
               <strong>Payment Methods</strong>
               <p>We accept all payment methods. If you are planning to use a debit card, consider paying by bank account (ACH) instead — it pulls from the same place and helps us keep things fee-free.</p>
             </div>
-            {!(priceLocked && lockQuery.deposit === lockQuery.maxPrice) && (
+            {!(depositLocked && lockQuery.deposit === lockQuery.maxPrice) && (
               <div className="info-item">
                 <strong>Need a payment plan instead?</strong>
                 <p><button className="contact-link" onClick={() => setPaymentOption(null)}>Change to payment plan</button></p>
@@ -860,9 +861,9 @@ function App() {
           <PriceSection {...priceSectionProps} />
 
           {/* Deposit Section */}
-          <div className={`deposit-section ${priceLocked ? 'deposit-locked' : ''}`}>
+          <div className={`deposit-section ${depositLocked ? 'deposit-locked' : ''}`}>
             <span className="label">Deposit</span>
-            {priceLocked ? (
+            {depositLocked ? (
               <span className="deposit-locked-amount">{formatCurrency(deposit)}</span>
             ) : (
               <div className="deposit-buttons">
@@ -893,7 +894,7 @@ function App() {
               </div>
             )}
           </div>
-          {priceLocked && <p className="lock-note">Agreed with the office. This amount stays fixed.</p>}
+          {depositLocked && <p className="lock-note">Agreed with the office. This amount stays fixed.</p>}
 
           {!canUseCustomSchedule && (
             <section className="section timeline-section">
@@ -1065,9 +1066,15 @@ function App() {
             <div className="ach-modal-icon">🧭</div>
             <h2>Explore your options</h2>
             <p className="ach-modal-message">
-              {priceLocked ? (
+              {depositLocked ? (
                 <>
                   Your total and deposit are already set. You can still choose how to pay the rest.
+                  <br /><br />
+                  Nothing is billed until you submit.
+                </>
+              ) : priceLocked ? (
+                <>
+                  Your total is already set. You choose the deposit and how to pay the rest.
                   <br /><br />
                   Nothing is billed until you submit.
                 </>
