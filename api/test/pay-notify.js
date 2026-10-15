@@ -1,19 +1,27 @@
 const { before, after, beforeEach, describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
 const https = require('https');
 const Module = require('module');
 const { EventEmitter } = require('events');
 
 const PATIENT = 'Zztest Patient';
 const EMAIL = 'zztest.patient@example.test';
-const NOTIFY_HOST = 'notify.example.test';
+const LIVE_NAME = 'Alex Morgan';
+const LIVE_EMAIL = 'alex.morgan@example.test';
+const FRONT_DESK_HOST = 'front-desk.example.test';
 const MAKE_HOST = 'make.example.test';
-const NOTIFY_URL = `https://${NOTIFY_HOST}/hooks/payment`;
+const OLD_NOTIFY_HOST = 'notify.example.test';
+const FRONT_DESK_URL = `https://${FRONT_DESK_HOST}/hooks/front-desk`;
 const MAKE_URL = `https://${MAKE_HOST}/webhook/pricing`;
-const TOKEN = 'notify-test-token';
+const OLD_NOTIFY_URL = `https://${OLD_NOTIFY_HOST}/hooks/payment`;
+const TOKEN = 'front-desk-test-token';
+const OPPORTUNITY_ID = 'recFAKE94';
 
 const MANAGED_ENV = [
   'MAKE_WEBHOOK_URL',
+  'FRONT_DESK_WEBHOOK_URL',
+  'FRONT_DESK_WEBHOOK_TOKEN',
   'PAY_NOTIFY_WEBHOOK_URL',
   'PAY_NOTIFY_WEBHOOK_TOKEN',
   'PUMBLE_VIA_MAKE_ENABLED',
@@ -77,14 +85,54 @@ https.request = function fakeRequest(options, callback) {
       return;
     }
     const res = new EventEmitter();
-    res.statusCode = typeof behavior === 'number' ? behavior : 200;
+    res.statusCode = behavior === 'phi' ? 500 : (typeof behavior === 'number' ? behavior : 200);
+    const responseBody = behavior === 'phi'
+      ? JSON.stringify({ name: PATIENT, email: EMAIL })
+      : '';
     process.nextTick(() => {
       callback(res);
-      res.emit('data', '');
+      res.emit('data', responseBody);
       res.emit('end');
     });
   };
   return req;
+};
+
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (url, opts) => {
+  const parsed = new URL(url);
+  const record = {
+    url,
+    options: {
+      hostname: parsed.hostname,
+      path: `${parsed.pathname}${parsed.search}`,
+      headers: { ...(opts && opts.headers) },
+    },
+    body: opts && opts.body,
+  };
+  requests.push(record);
+  sequence.push(`fetch:${parsed.hostname}`);
+  const behavior = behaviors[parsed.hostname] || 'ok';
+  if (behavior === 'error') {
+    throw new Error(`webhook down ${url}`);
+  }
+  if (behavior === 'timeout') {
+    return new Promise((_resolve, reject) => {
+      const fail = () => {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        reject(err);
+      };
+      if (opts && opts.signal && opts.signal.aborted) return fail();
+      if (opts && opts.signal) opts.signal.addEventListener('abort', fail, { once: true });
+    });
+  }
+  const status = typeof behavior === 'number' ? behavior : 200;
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => '',
+  };
 };
 
 const originalLoad = Module._load;
@@ -165,12 +213,15 @@ Module._load = function load(request, parent, isMain) {
   return originalLoad.call(this, request, parent, isMain);
 };
 
+const { resetFrontDeskEventForTests } = require('../front-desk-event');
 const {
-  NOTIFY_TIMEOUT_MS,
+  EVENT,
+  SOURCE,
   isPumbleViaMakeEnabled,
-  authorizationHeader,
   isStripeTestMode,
-  buildPaymentNotification,
+  isZztestRecord,
+  buildFrontDeskPaymentEvent,
+  sendPaymentNotification,
 } = require('../pay-notify');
 const { handler } = require('../index');
 
@@ -182,6 +233,13 @@ function stripeEnv(key = 'sk_test_zztest') {
     STRIPE_SECRET_KEY: key,
     STRIPE_DEPOSIT_PRODUCT_ID: 'prod_zztest_deposit',
     STRIPE_MONTHLY_PRODUCT_ID: 'prod_zztest_monthly',
+  };
+}
+
+function frontDeskEnv(token = TOKEN) {
+  return {
+    FRONT_DESK_WEBHOOK_URL: FRONT_DESK_URL,
+    FRONT_DESK_WEBHOOK_TOKEN: token,
   };
 }
 
@@ -207,14 +265,40 @@ function requestsTo(host) {
 
 function assertLogsSafe(submissionId) {
   const text = `${logs.join('\n')}\n${errors.join('\n')}`;
-  assert.equal(text.includes(NOTIFY_HOST), false);
-  assert.equal(text.includes(MAKE_HOST), false);
-  assert.equal(text.includes(TOKEN), false);
-  assert.equal(text.includes('sk_test_zztest'), false);
-  assert.equal(text.includes('sk_live_zztest'), false);
-  assert.equal(text.includes('rk_test_zztest'), false);
+  for (const secret of [
+    FRONT_DESK_HOST,
+    MAKE_HOST,
+    OLD_NOTIFY_HOST,
+    TOKEN,
+    'sk_test_zztest',
+    'sk_live_example',
+    'rk_test_zztest',
+    PATIENT,
+    EMAIL,
+    LIVE_NAME,
+    LIVE_EMAIL,
+    'PAY_NOTIFY_WEBHOOK_URL',
+    'PAY_NOTIFY_WEBHOOK_TOKEN',
+  ]) {
+    assert.equal(text.includes(secret), false, secret);
+  }
   const writing = logs.filter((line) => line.startsWith('Writing to DynamoDB:'));
   assert.deepEqual(writing, [`Writing to DynamoDB: ${submissionId}`]);
+}
+
+function assertEnvelopeHasNoPhi(sent) {
+  for (const key of ['name', 'email', 'patientName', 'phone']) {
+    assert.equal(Object.hasOwn(sent, key), false, key);
+    assert.equal(Object.hasOwn(sent.data || {}, key), false, key);
+  }
+  const raw = JSON.stringify(sent);
+  assert.equal(raw.includes(PATIENT), false);
+  assert.equal(raw.includes(EMAIL), false);
+  assert.equal(raw.includes(LIVE_NAME), false);
+  assert.equal(raw.includes(LIVE_EMAIL), false);
+  assert.equal(raw.includes('sk_test_'), false);
+  assert.equal(raw.includes('sk_live_'), false);
+  assert.equal(raw.includes('rk_test_'), false);
 }
 
 async function submit(body, env = {}) {
@@ -240,6 +324,7 @@ after(() => {
   console.log = originalLog;
   console.error = originalError;
   Module._load = originalLoad;
+  globalThis.fetch = originalFetch;
   for (const key of MANAGED_ENV) delete process.env[key];
 });
 
@@ -249,53 +334,67 @@ beforeEach(() => {
   logs.length = 0;
   errors.length = 0;
   stripeFails = false;
+  resetFrontDeskEventForTests();
   for (const key of Object.keys(behaviors)) delete behaviors[key];
   for (const key of MANAGED_ENV) delete process.env[key];
 });
 
-describe('payment notification helpers', () => {
-  it('builds plan, installment, and full notifications', () => {
-    const plan = buildPaymentNotification({
-      payload: submission({ isSlidingScale: true }),
+describe('payment notification event', () => {
+  const stripe = {
+    customerId: 'cus_zztest',
+    invoiceId: 'in_deposit_zztest',
+    invoiceUrl: 'https://invoice.example.test/in_deposit_zztest',
+    subscriptionScheduleId: 'sub_sched_zztest',
+    subscriptionId: 'sub_zztest',
+    futureInvoiceIds: null,
+  };
+
+  it('builds a payment_plan_submitted envelope without a name or email', () => {
+    const plan = buildFrontDeskPaymentEvent({
+      payload: submission({ isSlidingScale: true, opportunityId: `  ${OPPORTUNITY_ID}  ` }),
       submissionId: 'subm_zztest',
       stripeKey: 'sk_test_zztest',
-      stripe: { customerId: 'cus_zztest', invoiceId: 'in_deposit_zztest' },
-      now: new Date('2026-10-14T22:54:25.452Z'),
+      stripe,
     });
-    assert.equal(plan.body.event, 'plan_selected');
-    assert.equal(plan.body.method, 'stripe_subscription_schedule');
-    assert.equal(plan.body.amount, 4250);
-    assert.equal(plan.body.testMode, true);
-    assert.equal(plan.body.patientName, PATIENT);
-    assert.equal(plan.body.timestamp, '2026-10-14T22:54:25.452Z');
-    assert.equal(plan.body.plan.installments, undefined);
-    assert.equal(plan.body.email, undefined);
-    assert.equal(plan.headers['X-Patient-Name'], 'Zztest%20Patient');
-    assert.equal(plan.headers['X-Amount'], '4250');
+    assert.equal(plan.event, EVENT);
+    assert.equal(plan.eventId, 'payment_plan_submitted:subm_zztest');
+    assert.equal(plan.source, SOURCE);
+    assert.equal(plan.test, true);
+    assert.equal(plan.data.opportunityId, OPPORTUNITY_ID);
+    assert.equal(plan.data.paymentOption, 'plan');
+    assert.equal(plan.data.amount, 4250);
+    assert.equal(plan.data.method, 'stripe_subscription_schedule');
+    assert.equal(plan.data.patientName, undefined);
+    assert.equal(plan.data.email, undefined);
+    assert.equal(plan.data.name, undefined);
+    assertEnvelopeHasNoPhi({ data: plan.data, ...plan });
 
     const installments = [
       { amount: 2125, dueDate: '2026-08-01' },
       { amount: 2125, dueDate: '2026-10-01' },
     ];
-    const installment = buildPaymentNotification({
+    const installment = buildFrontDeskPaymentEvent({
       payload: submission({
         paymentOption: 'installment',
         deposit: 4250,
-        monthlyPayment: 0,
-        months: 2,
         installments,
       }),
-      submissionId: 'subm_zztest',
+      submissionId: 'subm_installment',
       stripeKey: 'rk_test_zztest',
+      stripe: { ...stripe, futureInvoiceIds: ['in_future_1'] },
     });
-    assert.equal(installment.body.event, 'plan_selected');
-    assert.equal(installment.body.method, 'stripe_scheduled_invoices');
-    assert.equal(installment.body.amount, 4250);
-    assert.equal(installment.body.testMode, true);
-    assert.deepEqual(installment.body.plan.installments, installments);
+    assert.equal(installment.event, 'payment_plan_submitted');
+    assert.equal(installment.data.method, 'stripe_scheduled_invoices');
+    assert.equal(installment.data.amount, 4250);
+    assert.equal(installment.test, true);
+    assert.equal(installment.data.opportunityId, undefined);
+    assert.deepEqual(installment.data.stripe.futureInvoiceIds, ['in_future_1']);
+    assert.equal(installment.data.installments, undefined);
 
-    const full = buildPaymentNotification({
+    const full = buildFrontDeskPaymentEvent({
       payload: submission({
+        name: LIVE_NAME,
+        email: LIVE_EMAIL,
         paymentOption: 'full',
         totalPrice: 8500,
         deposit: 1000,
@@ -303,25 +402,52 @@ describe('payment notification helpers', () => {
         months: 0,
         payoffDate: null,
       }),
-      submissionId: 'subm_zztest',
-      stripeKey: 'sk_live_zztest',
+      submissionId: 'subm_full',
+      stripeKey: 'sk_live_example',
     });
-    assert.equal(full.body.event, 'payment_submitted');
-    assert.equal(full.body.method, 'stripe_invoice');
-    assert.equal(full.body.amount, 8500);
-    assert.equal(full.body.testMode, false);
-    assert.equal(full.headers['X-Amount'], '8500');
-    assert.equal(full.headers['X-Event-Type'], 'payment_submitted');
+    assert.equal(full.data.method, 'stripe_invoice');
+    assert.equal(full.data.amount, 8500);
+    assert.equal(full.test, false);
+    assert.equal(full.data.opportunityId, undefined);
+    assertEnvelopeHasNoPhi({ data: full.data });
   });
 
-  it('does not double a Bearer prefix', () => {
-    assert.equal(authorizationHeader(null), null);
-    assert.equal(authorizationHeader(''), null);
-    assert.equal(authorizationHeader('   '), null);
-    assert.equal(authorizationHeader(TOKEN), `Bearer ${TOKEN}`);
-    assert.equal(authorizationHeader(`Bearer ${TOKEN}`), `Bearer ${TOKEN}`);
-    assert.equal(authorizationHeader(`bearer ${TOKEN}`), `bearer ${TOKEN}`);
-    assert.equal(authorizationHeader(`  Bearer ${TOKEN}  `), `Bearer ${TOKEN}`);
+  it('sets test when the Stripe key is a test key or the record is ZZTEST', () => {
+    assert.equal(isStripeTestMode('sk_test_zztest'), true);
+    assert.equal(isStripeTestMode('rk_test_zztest'), true);
+    assert.equal(isStripeTestMode('sk_live_example'), false);
+    assert.equal(isStripeTestMode('rk_live_example'), false);
+    assert.equal(isStripeTestMode(''), false);
+    assert.equal(isStripeTestMode(undefined), false);
+
+    assert.equal(isZztestRecord(submission()), true);
+    assert.equal(isZztestRecord({ name: '  ZZTEST Patient' }), true);
+    assert.equal(isZztestRecord({ name: LIVE_NAME, email: EMAIL }), true);
+    assert.equal(isZztestRecord({ name: LIVE_NAME, email: LIVE_EMAIL, opportunityId: 'ZZTEST-rec' }), true);
+    assert.equal(isZztestRecord({ name: LIVE_NAME, email: LIVE_EMAIL, opportunityId: OPPORTUNITY_ID }), false);
+    assert.equal(isZztestRecord(null), false);
+
+    const liveKeyZztest = buildFrontDeskPaymentEvent({
+      payload: submission(),
+      submissionId: 'subm_zztest',
+      stripeKey: 'sk_live_example',
+    });
+    assert.equal(liveKeyZztest.test, true);
+
+    const testKeyLiveRecord = buildFrontDeskPaymentEvent({
+      payload: submission({ name: LIVE_NAME, email: LIVE_EMAIL }),
+      submissionId: 'subm_live',
+      stripeKey: 'rk_test_zztest',
+    });
+    assert.equal(testKeyLiveRecord.test, true);
+
+    const blankOpportunity = buildFrontDeskPaymentEvent({
+      payload: submission({ name: LIVE_NAME, email: LIVE_EMAIL, opportunityId: '   ' }),
+      submissionId: 'subm_live',
+      stripeKey: 'sk_live_example',
+    });
+    assert.equal(blankOpportunity.data.opportunityId, undefined);
+    assert.equal(blankOpportunity.test, false);
   });
 
   it('keeps the Make call on unless the flag is explicitly off', () => {
@@ -336,30 +462,63 @@ describe('payment notification helpers', () => {
     assert.equal(isPumbleViaMakeEnabled({ PUMBLE_VIA_MAKE_ENABLED: 'off' }), false);
   });
 
-  it('treats Stripe test keys as test mode', () => {
-    assert.equal(NOTIFY_TIMEOUT_MS, 5000);
-    assert.equal(isStripeTestMode('sk_test_zztest'), true);
-    assert.equal(isStripeTestMode('rk_test_zztest'), true);
-    assert.equal(isStripeTestMode('sk_live_zztest'), false);
-    assert.equal(isStripeTestMode('rk_live_zztest'), false);
-    assert.equal(isStripeTestMode(''), false);
-    assert.equal(isStripeTestMode(undefined), false);
+  it('does not reference the retired pay-notify webhook env vars', () => {
+    const payNotify = fs.readFileSync(require.resolve('../pay-notify.js'), 'utf8');
+    const handlerSource = fs.readFileSync(require.resolve('../index.js'), 'utf8');
+    for (const text of [payNotify, handlerSource]) {
+      assert.equal(text.includes('PAY_NOTIFY_WEBHOOK_URL'), false);
+      assert.equal(text.includes('PAY_NOTIFY_WEBHOOK_TOKEN'), false);
+    }
+  });
+
+  it('returns a failed result when the webhook times out and does not throw', async () => {
+    const result = await sendPaymentNotification({
+      payload: submission({ name: LIVE_NAME, email: LIVE_EMAIL }),
+      submissionId: 'subm_timeout',
+      stripeKey: 'sk_live_example',
+      stripe: {},
+      timeoutMs: 20,
+      env: frontDeskEnv(),
+      fetchImpl: (_url, opts) => new Promise((_resolve, reject) => {
+        const fail = () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        };
+        if (opts.signal.aborted) return fail();
+        opts.signal.addEventListener('abort', fail, { once: true });
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'timeout');
+    assert.equal(result.attempts, 2);
+    assert.equal(result.eventId, 'payment_plan_submitted:subm_timeout');
+    const logged = `${logs.join('\n')}\n${errors.join('\n')}`;
+    assert.equal(logged.includes(TOKEN), false);
+    assert.equal(logged.includes(FRONT_DESK_HOST), false);
+    assert.equal(logged.includes(LIVE_NAME), false);
+    assert.equal(logged.includes(LIVE_EMAIL), false);
+    assert.match(logged, /status=timeout/);
   });
 });
 
 describe('price submission handler notification', () => {
-  it('skips the payment webhook when the URL is unset and still calls Make', async () => {
+  it('skips the Front Desk webhook when the URL is unset and still calls Make', async () => {
     const body = submission();
-    const { response, json } = await submit(body, { MAKE_WEBHOOK_URL: MAKE_URL });
+    const { response, json } = await submit(body, {
+      MAKE_WEBHOOK_URL: MAKE_URL,
+      PAY_NOTIFY_WEBHOOK_URL: OLD_NOTIFY_URL,
+      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+    });
 
     assert.equal(response.statusCode, 200);
     assert.equal(json.success, true);
-    assert.equal(requestsTo(NOTIFY_HOST).length, 0);
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 0);
+    assert.equal(requestsTo(OLD_NOTIFY_HOST).length, 0);
     assert.equal(requestsTo(MAKE_HOST).length, 1);
     assert.deepEqual(JSON.parse(requestsTo(MAKE_HOST)[0].body), body);
     assert.equal(requestsTo(MAKE_HOST)[0].options.headers.Authorization, undefined);
-    assert.equal(requestsTo(MAKE_HOST)[0].timeoutMs, null);
-    assert.ok(logs.some((line) => line.startsWith('PAY_NOTIFY_WEBHOOK_URL not set — skipping payment notification:')));
+    assert.ok(logs.some((line) => line.includes('status=skipped') && line.includes(`eventId=${EVENT}:${json.submissionId}`)));
     assert.equal(
       logs.find((line) => line.startsWith('Calling make.com webhook:')),
       `Calling make.com webhook: ${json.submissionId}`,
@@ -367,16 +526,16 @@ describe('price submission handler notification', () => {
     assertLogsSafe(json.submissionId);
   });
 
-  it('posts body and headers for a plan, an installment plan, and pay-in-full', async () => {
+  it('posts the v1 envelope for a plan, an installment plan, and pay-in-full', async () => {
     const cases = [
       {
         label: 'plan',
         stripeKey: 'sk_test_zztest',
-        body: submission({ isSlidingScale: true }),
-        event: 'plan_selected',
+        body: submission({ isSlidingScale: true, opportunityId: OPPORTUNITY_ID }),
         method: 'stripe_subscription_schedule',
         amount: 4250,
-        testMode: true,
+        test: true,
+        opportunityId: OPPORTUNITY_ID,
         subscriptionId: 'sub_zztest',
         scheduleId: 'sub_sched_zztest',
         futureInvoiceIds: null,
@@ -385,7 +544,7 @@ describe('price submission handler notification', () => {
           'stripe-invoice',
           'stripe-schedule',
           'dynamo-update',
-          `https:${NOTIFY_HOST}`,
+          `fetch:${FRONT_DESK_HOST}`,
         ],
       },
       {
@@ -404,11 +563,11 @@ describe('price submission handler notification', () => {
             { amount: 2500, dueDate: '2026-10-01' },
           ],
         }),
-        event: 'plan_selected',
         method: 'stripe_scheduled_invoices',
         amount: 4000,
-        testMode: true,
-        subscriptionId: '',
+        test: true,
+        opportunityId: undefined,
+        subscriptionId: null,
         scheduleId: null,
         futureInvoiceIds: ['in_future_1', 'in_future_2'],
         sequence: [
@@ -417,13 +576,15 @@ describe('price submission handler notification', () => {
           'stripe-invoice',
           'stripe-invoice',
           'dynamo-update',
-          `https:${NOTIFY_HOST}`,
+          `fetch:${FRONT_DESK_HOST}`,
         ],
       },
       {
         label: 'full',
-        stripeKey: 'sk_live_zztest',
+        stripeKey: 'sk_live_example',
         body: submission({
+          name: LIVE_NAME,
+          email: LIVE_EMAIL,
           paymentOption: 'full',
           totalPrice: 8500,
           deposit: 1000,
@@ -431,18 +592,18 @@ describe('price submission handler notification', () => {
           months: 0,
           payoffDate: null,
         }),
-        event: 'payment_submitted',
         method: 'stripe_invoice',
         amount: 8500,
-        testMode: false,
-        subscriptionId: '',
+        test: false,
+        opportunityId: undefined,
+        subscriptionId: null,
         scheduleId: null,
         futureInvoiceIds: null,
         sequence: [
           'dynamo-put',
           'stripe-invoice',
           'dynamo-update',
-          `https:${NOTIFY_HOST}`,
+          `fetch:${FRONT_DESK_HOST}`,
         ],
       },
     ];
@@ -452,12 +613,12 @@ describe('price submission handler notification', () => {
       sequence.length = 0;
       logs.length = 0;
       errors.length = 0;
+      resetFrontDeskEventForTests();
       for (const key of MANAGED_ENV) delete process.env[key];
 
       const { response, json } = await submit(item.body, {
         ...stripeEnv(item.stripeKey),
-        PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-        PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+        ...frontDeskEnv(),
       });
 
       assert.equal(response.statusCode, 200, item.label);
@@ -465,116 +626,124 @@ describe('price submission handler notification', () => {
       assert.equal(json.invoiceUrl, 'https://invoice.example.test/in_deposit_zztest', item.label);
       assert.deepEqual(sequence, item.sequence, item.label);
       assert.equal(requestsTo(MAKE_HOST).length, 0, item.label);
+      assert.equal(requestsTo(OLD_NOTIFY_HOST).length, 0, item.label);
 
-      const notify = requestsTo(NOTIFY_HOST);
+      const notify = requestsTo(FRONT_DESK_HOST);
       assert.equal(notify.length, 1, item.label);
-      assert.equal(notify[0].options.path, '/hooks/payment', item.label);
-      assert.equal(notify[0].timeoutMs, 5000, item.label);
+      assert.equal(notify[0].options.path, '/hooks/front-desk', item.label);
 
       const sent = JSON.parse(notify[0].body);
-      assert.match(sent.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, item.label);
-      assert.ok(Math.abs(Date.now() - Date.parse(sent.timestamp)) < 10000, item.label);
-      const timestamp = sent.timestamp;
-      delete sent.timestamp;
+      assert.match(sent.occurredAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, item.label);
+      assert.ok(Math.abs(Date.now() - Date.parse(sent.occurredAt)) < 10000, item.label);
+      const occurredAt = sent.occurredAt;
+      delete sent.occurredAt;
 
-      const expectedPlan = {
-        totalPrice: item.body.totalPrice,
-        deposit: item.body.deposit,
-        monthlyPayment: item.body.monthlyPayment,
-        months: item.body.months,
-        isSlidingScale: item.body.isSlidingScale,
-        payoffDate: item.body.payoffDate,
-      };
-      if (item.body.installments) expectedPlan.installments = item.body.installments;
-
-      assert.deepEqual(sent, {
-        event: item.event,
-        patientName: PATIENT,
-        paymentOption: item.body.paymentOption,
-        plan: expectedPlan,
-        amount: item.amount,
-        method: item.method,
-        stripe: {
-          customerId: 'cus_zztest',
-          invoiceId: 'in_deposit_zztest',
-          invoiceUrl: 'https://invoice.example.test/in_deposit_zztest',
-          subscriptionScheduleId: item.scheduleId,
-          subscriptionId: item.subscriptionId || null,
-          futureInvoiceIds: item.futureInvoiceIds,
+      const expected = {
+        version: 1,
+        event: 'payment_plan_submitted',
+        eventId: `payment_plan_submitted:${json.submissionId}`,
+        source: SOURCE,
+        test: item.test,
+        data: {
+          submissionId: json.submissionId,
+          paymentOption: item.body.paymentOption,
+          amount: item.amount,
+          method: item.method,
+          stripe: {
+            customerId: 'cus_zztest',
+            invoiceId: 'in_deposit_zztest',
+            invoiceUrl: 'https://invoice.example.test/in_deposit_zztest',
+            subscriptionScheduleId: item.scheduleId,
+            subscriptionId: item.subscriptionId,
+            futureInvoiceIds: item.futureInvoiceIds,
+          },
         },
-        submissionId: json.submissionId,
-        testMode: item.testMode,
-      }, item.label);
-      assert.equal(sent.email, undefined, item.label);
-      assert.equal(timestamp.endsWith('Z'), true, item.label);
+      };
+      if (item.opportunityId) expected.data.opportunityId = item.opportunityId;
+
+      assert.deepEqual(sent, expected, item.label);
+      assert.equal(occurredAt.endsWith('Z'), true, item.label);
+      assertEnvelopeHasNoPhi(sent);
 
       const headers = notify[0].options.headers;
       assert.equal(headers['Content-Type'], 'application/json', item.label);
       assert.equal(headers.Authorization, `Bearer ${TOKEN}`, item.label);
       assert.equal(headers.Authorization.includes('Bearer Bearer'), false, item.label);
-      assert.equal(headers['X-Event-Type'], item.event, item.label);
-      assert.equal(headers['X-Patient-Name'], 'Zztest%20Patient', item.label);
-      assert.equal(headers['X-Submission-Id'], json.submissionId, item.label);
-      assert.equal(headers['X-Stripe-Customer-Id'], 'cus_zztest', item.label);
-      assert.equal(headers['X-Stripe-Subscription-Id'], item.subscriptionId, item.label);
-      assert.equal(headers['X-Stripe-Invoice-Id'], 'in_deposit_zztest', item.label);
-      assert.equal(headers['X-Amount'], String(item.amount), item.label);
-      assert.equal(headers['X-Payment-Option'], item.body.paymentOption, item.label);
-      assert.ok(logs.includes(`Payment notification status: 200`), item.label);
+      assert.equal(headers['X-Patient-Name'], undefined, item.label);
+      assert.equal(headers['X-Event-Type'], undefined, item.label);
+      assert.ok(logs.some((line) => (
+        line.includes('status=200')
+        && line.includes(`eventId=payment_plan_submitted:${json.submissionId}`)
+      )), item.label);
       assertLogsSafe(json.submissionId);
     }
   });
 
-  it('does not prefix Bearer when the token already has it', async () => {
+  it('marks a live-key ZZTEST submission as a test and omits opportunityId when absent', async () => {
     const { response, json } = await submit(submission(), {
-      ...stripeEnv(),
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: `Bearer ${TOKEN}`,
+      ...stripeEnv('sk_live_example'),
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 200);
-    const headers = requestsTo(NOTIFY_HOST)[0].options.headers;
+    const sent = JSON.parse(requestsTo(FRONT_DESK_HOST)[0].body);
+    assert.equal(sent.test, true);
+    assert.equal(sent.eventId, `payment_plan_submitted:${json.submissionId}`);
+    assert.equal(sent.data.opportunityId, undefined);
+    assertEnvelopeHasNoPhi(sent);
+    assertLogsSafe(json.submissionId);
+  });
+
+  it('does not prefix Bearer when the token already has it', async () => {
+    const { response, json } = await submit(submission({ name: LIVE_NAME, email: LIVE_EMAIL }), {
+      ...stripeEnv('sk_live_example'),
+      ...frontDeskEnv(`Bearer ${TOKEN}`),
+    });
+    assert.equal(response.statusCode, 200);
+    const headers = requestsTo(FRONT_DESK_HOST)[0].options.headers;
     assert.equal(headers.Authorization, `Bearer ${TOKEN}`);
     assert.equal(headers.Authorization.includes('Bearer Bearer'), false);
+    const sent = JSON.parse(requestsTo(FRONT_DESK_HOST)[0].body);
+    assert.equal(sent.test, false);
     assertLogsSafe(json.submissionId);
   });
 
-  it('returns 200 when the payment webhook responds with an error status', async () => {
-    behaviors[NOTIFY_HOST] = 502;
+  it('returns 200 when the Front Desk webhook responds with an error status', async () => {
+    behaviors[FRONT_DESK_HOST] = 502;
     const { response, json } = await submit(submission(), {
       ...stripeEnv(),
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 200);
     assert.equal(json.success, true);
-    assert.ok(logs.includes('Payment notification status: 502'));
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 2);
+    assert.ok(logs.some((line) => line.includes('status=502') && line.includes(json.submissionId)));
     assertLogsSafe(json.submissionId);
   });
 
-  it('returns 200 when the payment webhook errors', async () => {
-    behaviors[NOTIFY_HOST] = 'error';
+  it('returns 200 when the Front Desk webhook rejects the event', async () => {
+    behaviors[FRONT_DESK_HOST] = 400;
     const { response, json } = await submit(submission(), {
       ...stripeEnv(),
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 200);
     assert.equal(json.success, true);
-    assert.ok(errors.some((line) => line === `Payment notification failed: ${json.submissionId}`));
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 1);
+    assert.ok(logs.some((line) => line.includes('status=400')));
     assertLogsSafe(json.submissionId);
   });
 
-  it('returns 200 when the payment webhook times out', async () => {
-    behaviors[NOTIFY_HOST] = 'timeout';
+  it('returns 200 when the Front Desk webhook errors', async () => {
+    behaviors[FRONT_DESK_HOST] = 'error';
     const { response, json } = await submit(submission(), {
       ...stripeEnv(),
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 200);
     assert.equal(json.success, true);
-    assert.equal(requestsTo(NOTIFY_HOST)[0].timeoutMs, 5000);
-    assert.ok(errors.some((line) => line === `Payment notification timed out: ${json.submissionId}`));
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 2);
+    assert.ok(logs.some((line) => line.includes('status=error') && line.includes(json.submissionId)));
+    assert.equal(errors.some((line) => line.includes(FRONT_DESK_URL)), false);
     assertLogsSafe(json.submissionId);
   });
 
@@ -583,21 +752,19 @@ describe('price submission handler notification', () => {
     const { response, json } = await submit(body, {
       MAKE_WEBHOOK_URL: MAKE_URL,
       PUMBLE_VIA_MAKE_ENABLED: 'true',
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 200);
-    assert.equal(requestsTo(MAKE_HOST).length, 1);
+    assert.deepEqual(sequence, [
+      'dynamo-put',
+      `https:${MAKE_HOST}`,
+      `fetch:${FRONT_DESK_HOST}`,
+    ]);
     const make = requestsTo(MAKE_HOST)[0];
     assert.deepEqual(JSON.parse(make.body), body);
-    assert.equal(make.options.headers['X-Event-Type'], undefined);
     assert.equal(make.options.headers.Authorization, undefined);
-    assert.equal(make.timeoutMs, null);
     assert.equal(make.options.path, '/webhook/pricing');
-    assert.equal(requestsTo(NOTIFY_HOST).length, 1);
-    assert.ok(sequence.indexOf(`https:${MAKE_HOST}`) < sequence.indexOf('dynamo-update')
-      || sequence.indexOf('dynamo-update') === -1);
-    assert.ok(sequence.indexOf(`https:${MAKE_HOST}`) < sequence.indexOf(`https:${NOTIFY_HOST}`));
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 1);
     assertLogsSafe(json.submissionId);
   });
 
@@ -607,18 +774,18 @@ describe('price submission handler notification', () => {
       sequence.length = 0;
       logs.length = 0;
       errors.length = 0;
+      resetFrontDeskEventForTests();
       for (const key of MANAGED_ENV) delete process.env[key];
 
       const { response, json } = await submit(submission(), {
         ...stripeEnv(),
         MAKE_WEBHOOK_URL: MAKE_URL,
         PUMBLE_VIA_MAKE_ENABLED: flag,
-        PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-        PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+        ...frontDeskEnv(),
       });
       assert.equal(response.statusCode, 200, flag);
       assert.equal(requestsTo(MAKE_HOST).length, 0, flag);
-      assert.equal(requestsTo(NOTIFY_HOST).length, 1, flag);
+      assert.equal(requestsTo(FRONT_DESK_HOST).length, 1, flag);
       assert.ok(logs.some((line) => line.startsWith('PUMBLE_VIA_MAKE_ENABLED is false — skipping make.com webhook:')), flag);
       assertLogsSafe(json.submissionId);
     }
@@ -626,29 +793,43 @@ describe('price submission handler notification', () => {
 
   it('still fails the submission when Make returns an error', async () => {
     behaviors[MAKE_HOST] = 500;
-    const { response } = await submit(submission(), {
+    const { response, json } = await submit(submission(), {
       MAKE_WEBHOOK_URL: MAKE_URL,
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 500);
-    assert.equal(requestsTo(NOTIFY_HOST).length, 0);
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 0);
     assert.equal(requestsTo(MAKE_HOST).length, 1);
+    assert.equal(json.message, 'Webhook returned status 500');
+  });
+
+  it('does not return or log a Make error body that contains a name or email', async () => {
+    behaviors[MAKE_HOST] = 'phi';
+    const { response, json } = await submit(submission(), {
+      MAKE_WEBHOOK_URL: MAKE_URL,
+      ...frontDeskEnv(),
+    });
+    assert.equal(response.statusCode, 500);
+    assert.equal(json.message.includes(PATIENT), false);
+    assert.equal(json.message.includes(EMAIL), false);
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 0);
+    const text = `${logs.join('\n')}\n${errors.join('\n')}\n${response.body}`;
+    assert.equal(text.includes(PATIENT), false);
+    assert.equal(text.includes(EMAIL), false);
   });
 
   it('notifies with empty Stripe ids when Stripe throws', async () => {
     stripeFails = true;
     const { response, json } = await submit(submission(), {
       ...stripeEnv(),
-      PAY_NOTIFY_WEBHOOK_URL: NOTIFY_URL,
-      PAY_NOTIFY_WEBHOOK_TOKEN: TOKEN,
+      ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 200);
     assert.equal(json.success, true);
     assert.equal(json.invoiceUrl, undefined);
     assert.equal(sequence.includes('dynamo-update'), false);
-    const sent = JSON.parse(requestsTo(NOTIFY_HOST)[0].body);
-    assert.deepEqual(sent.stripe, {
+    const sent = JSON.parse(requestsTo(FRONT_DESK_HOST)[0].body);
+    assert.deepEqual(sent.data.stripe, {
       customerId: null,
       invoiceId: null,
       invoiceUrl: null,
@@ -656,10 +837,9 @@ describe('price submission handler notification', () => {
       subscriptionId: null,
       futureInvoiceIds: null,
     });
-    assert.equal(sent.testMode, true);
-    assert.equal(requestsTo(NOTIFY_HOST)[0].options.headers['X-Stripe-Customer-Id'], '');
-    assert.equal(requestsTo(NOTIFY_HOST)[0].options.headers['X-Stripe-Subscription-Id'], '');
-    assert.equal(requestsTo(NOTIFY_HOST)[0].options.headers['X-Stripe-Invoice-Id'], '');
+    assert.equal(sent.test, true);
+    assert.equal(sent.event, 'payment_plan_submitted');
+    assertEnvelopeHasNoPhi(sent);
     assertLogsSafe(json.submissionId);
   });
 });
