@@ -137,7 +137,7 @@ The submission Lambda (`api/index.js`, `price-submission-handler`) notifies the 
 | `PAY_NOTIFY_WEBHOOK_TOKEN` | Sender key (`Authorization: Bearer …`). A value that already starts with `Bearer ` is not prefixed again. |
 | `PUMBLE_VIA_MAKE_ENABLED` | Default `true`. While true, `MAKE_WEBHOOK_URL` still receives the raw submission (Google Sheets). `false` skips that call. |
 
-Secret name (values stay out of git): `office-pricing/pay-notify-webhook` (`url`, `token`), created with `--profile engineering`.
+Those two values are environment variables on `price-submission-handler` only. Do not commit them, and do not store them in Secrets Manager.
 
 `plan` and `installment` notify as `plan_selected`. Pay-in-full notifies as `payment_submitted` (assumption for Matt / Finance). `testMode` follows a Stripe test key (`sk_test_` or `rk_test_`).
 
