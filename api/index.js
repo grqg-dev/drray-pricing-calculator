@@ -3,6 +3,7 @@ const https = require('https');
 const { v4: uuidv4 } = require('uuid');
 const Stripe = require('stripe');
 const { gateLockedRequest } = require('./lock-link');
+const { isPumbleViaMakeEnabled, sendPaymentNotification } = require('./pay-notify');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -107,19 +108,22 @@ exports.handler = async (event) => {
       ...(payload.paymentOption === 'installment' && payload.installments && { installments: payload.installments })
     };
 
-    // Write to DynamoDB
-    console.log('Writing to DynamoDB:', dynamoItem);
+    // Write to DynamoDB. Log the id only — the item contains PHI.
+    console.log('Writing to DynamoDB:', submissionId);
     await dynamodb.put({
       TableName: DYNAMODB_TABLE,
       Item: dynamoItem
     }).promise();
     console.log('Successfully wrote to DynamoDB');
 
-    // Call make.com webhook (optional when MAKE_WEBHOOK_URL not set)
-    if (MAKE_WEBHOOK_URL) {
-      console.log('Calling make.com webhook:', MAKE_WEBHOOK_URL);
+    // Call make.com webhook when enabled (optional when MAKE_WEBHOOK_URL is unset).
+    // Default on, so the Google Sheets row keeps running. Do not log the URL.
+    if (isPumbleViaMakeEnabled() && MAKE_WEBHOOK_URL) {
+      console.log('Calling make.com webhook:', submissionId);
       await callWebhook(MAKE_WEBHOOK_URL, payload);
       console.log('Successfully called make.com webhook');
+    } else if (!isPumbleViaMakeEnabled()) {
+      console.log('PUMBLE_VIA_MAKE_ENABLED is false — skipping make.com webhook:', submissionId);
     } else {
       console.log('MAKE_WEBHOOK_URL not set — skipping webhook');
     }
@@ -127,6 +131,10 @@ exports.handler = async (event) => {
     // Create Stripe invoice for the deposit
     let invoiceUrl = null;
     let stripeInvoiceId = null;
+    let stripeCustomerId = null;
+    let subscriptionScheduleId = null;
+    let subscriptionId = null;
+    let stripeFutureInvoiceIds = null;
 
     if (STRIPE_SECRET_KEY && STRIPE_DEPOSIT_PRODUCT_ID) {
       try {
@@ -143,14 +151,12 @@ exports.handler = async (event) => {
         });
         invoiceUrl = stripeResult.invoiceUrl;
         stripeInvoiceId = stripeResult.invoiceId;
+        stripeCustomerId = stripeResult.customerId;
         console.log('[STRIPE] Deposit invoice created:', stripeInvoiceId, invoiceUrl);
 
         // Collection paths (JRDO-66):
         // - paymentOption "plan" → Stripe subscription schedule (equal monthly invoices)
         // - paymentOption "installment" → one scheduled Stripe invoice per custom payment (no subscription)
-        let subscriptionScheduleId = null;
-        let subscriptionId = null;
-
         if (payload.paymentOption === 'plan' && payload.months > 0 && payload.monthlyPayment > 0) {
           const monthlyAmountCents = Math.round(payload.monthlyPayment * 100);
           console.log('[SUBSCRIPTION] Starting subscription schedule creation', {
@@ -171,7 +177,6 @@ exports.handler = async (event) => {
         }
 
         // Create scheduled future invoices for installment option
-        let stripeFutureInvoiceIds = null;
         if (payload.paymentOption === 'installment' && Array.isArray(payload.installments) && payload.installments.length > 0) {
           try {
             stripeFutureInvoiceIds = await createScheduledInvoices(Stripe(STRIPE_SECRET_KEY), {
@@ -211,6 +216,25 @@ exports.handler = async (event) => {
       }
     } else {
       console.log('Stripe not configured — skipping invoice creation');
+    }
+
+    // After Stripe IDs exist (or Stripe was skipped). Never fail the submission.
+    try {
+      await sendPaymentNotification({
+        payload,
+        submissionId,
+        stripeKey: STRIPE_SECRET_KEY,
+        stripe: {
+          customerId: stripeCustomerId,
+          invoiceId: stripeInvoiceId,
+          invoiceUrl,
+          subscriptionScheduleId,
+          subscriptionId,
+          futureInvoiceIds: stripeFutureInvoiceIds,
+        },
+      });
+    } catch (notifyError) {
+      console.error('Payment notification failed:', submissionId);
     }
 
     // Return success
