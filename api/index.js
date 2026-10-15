@@ -16,7 +16,7 @@ const CORS_HEADERS = {
 const INSTALLMENT_DAYS_UNTIL_DUE = 15;
 
 exports.handler = async (event) => {
-  console.log('Received event:', JSON.stringify(event, null, 2));
+  console.log('Received request:', event && event.httpMethod ? event.httpMethod : 'unknown');
 
   // Get environment variables
   const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
@@ -62,7 +62,6 @@ exports.handler = async (event) => {
       ? Buffer.from(event.body, 'base64').toString('utf-8')
       : event.body;
     const payload = JSON.parse(rawBody);
-    console.log('Parsed payload:', payload);
 
     // Locked links are checked before DynamoDB, Make, or Stripe.
     const gate = gateLockedRequest(payload, process.env.PRICE_LOCK_SECRET);
@@ -218,7 +217,8 @@ exports.handler = async (event) => {
       console.log('Stripe not configured — skipping invoice creation');
     }
 
-    // After Stripe IDs exist (or Stripe was skipped). Never fail the submission.
+    // Front Desk event after Stripe ids exist (or Stripe was skipped).
+    // sendPaymentNotification does not reject; this catch is a backstop.
     try {
       await sendPaymentNotification({
         payload,
@@ -329,7 +329,7 @@ async function createStripeInvoice({ stripeKey, productId, name, email, deposit,
 
   // Send the invoice email
   await stripe.invoices.sendInvoice(invoice.id);
-  console.log('Invoice sent to', email);
+  console.log('Invoice sent:', finalizedInvoice.id);
 
   return {
     invoiceId: finalizedInvoice.id,
@@ -487,11 +487,11 @@ function callWebhook(url, payload) {
       });
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log('Webhook response:', data);
+          console.log('Webhook response status:', res.statusCode);
           resolve(data);
         } else {
-          console.error('Webhook error response:', res.statusCode, data);
-          reject(new Error(`Webhook returned status ${res.statusCode}: ${data}`));
+          console.error('Webhook error response status:', res.statusCode);
+          reject(new Error(`Webhook returned status ${res.statusCode}`));
         }
       });
     });

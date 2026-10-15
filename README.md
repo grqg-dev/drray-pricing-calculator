@@ -129,19 +129,67 @@ App.jsx
 
 ## Payment notification
 
-The submission Lambda (`api/index.js`, `price-submission-handler`) notifies the Grok Bot routine "Payment plan / payment notification" after Stripe ids are saved. The webhook cannot fail or stall the patient's submission (5 second timeout). Nothing is deployed until Matt approves.
+After Stripe ids are saved, `price-submission-handler` (`api/index.js`) sends Front Desk event `payment_plan_submitted`. The sender is the vendored helper `api/front-desk-event.js` (from `grqg-dev/drray` `shared/front-desk-event` at `444f2ff`). The envelope is the v1 contract in that repo's `docs/front-desk-events.md`.
+
+The event id is `payment_plan_submitted:<submissionId>`. `data` carries `submissionId`, `paymentOption`, `amount`, `method`, and Stripe ids. `data.opportunityId` is included when the submission body has one. Name, email, and other PHI are not in the event or in the logs.
+
+`test` is true when `STRIPE_SECRET_KEY` starts with `sk_test_` or `rk_test_`, or when the submission name, email, or opportunity id starts with `ZZTEST` (any case). A test event uses the same webhook. The routine prefixes its note `[TEST]` and skips follow-ups.
+
+The helper POSTs JSON with a 3 second timeout and one retry (timeout, network error, 429, or 5xx). A 4xx is not retried. It never throws. A skip, a failed response, or a timeout does not change the submission response. The log line is `event`, `eventId`, and `status` only.
 
 | Env var | Purpose |
 |---------|---------|
-| `PAY_NOTIFY_WEBHOOK_URL` | Routine webhook URL. Unset skips the call. |
-| `PAY_NOTIFY_WEBHOOK_TOKEN` | Sender key (`Authorization: Bearer …`). A value that already starts with `Bearer ` is not prefixed again. |
-| `PUMBLE_VIA_MAKE_ENABLED` | Default `true`. While true, `MAKE_WEBHOOK_URL` still receives the raw submission (Google Sheets). `false` skips that call. |
+| `FRONT_DESK_WEBHOOK_URL` | Front Desk webhook. Must be `https`. Unset, or a non-https URL, skips the call. |
+| `FRONT_DESK_WEBHOOK_TOKEN` | Bearer token. A value that already starts with `Bearer ` is not prefixed again. |
+| `PUMBLE_VIA_MAKE_ENABLED` | Default `true`. While true, `MAKE_WEBHOOK_URL` still receives the raw submission (Google Sheets). `false`, `0`, `no`, or `off` skips that call. |
 
-Those two values are environment variables on `price-submission-handler` only. Do not commit them, and do not store them in Secrets Manager.
+Set the Front Desk URL and token on the Lambda only. Do not commit them, and do not put them in Secrets Manager. The function no longer reads `PAY_NOTIFY_WEBHOOK_URL` or `PAY_NOTIFY_WEBHOOK_TOKEN`.
 
-`plan` and `installment` notify as `plan_selected`. Pay-in-full notifies as `payment_submitted` (assumption for Matt / Finance). `testMode` follows a Stripe test key (`sk_test_` or `rk_test_`).
+Runtime must be Node.js 18 or newer. The helper uses `fetch`.
 
-After a fake-patient test in Stripe test mode passes, Matt removes module #4 (Pumble) from Make scenario 3819523 and leaves the Sheets row in place. Snapshot that scenario first. Do not change Make from this repo.
+### Deploy
+
+Do not deploy until Matt confirms. Merging to `main` runs `.github/workflows/deploy-api.yml`, which updates `price-submission-handler` in `us-east-1`.
+
+1. Read the current variables. `update-function-configuration --environment` replaces the whole set, so keep every existing key.
+
+```bash
+aws lambda get-function-configuration \
+  --function-name price-submission-handler \
+  --profile engineering \
+  --region us-east-1 \
+  --query Environment \
+  --output json > /tmp/price-submission-env.json
+```
+
+2. Add `FRONT_DESK_WEBHOOK_URL` and `FRONT_DESK_WEBHOOK_TOKEN` to `Variables`. Leave `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN` in place until the new code is confirmed, so the function that is live now keeps notifying. Leave `MAKE_WEBHOOK_URL`, `PUMBLE_VIA_MAKE_ENABLED`, `STRIPE_SECRET_KEY`, `STRIPE_DEPOSIT_PRODUCT_ID`, `STRIPE_MONTHLY_PRODUCT_ID`, `DYNAMODB_TABLE`, `PRICE_LOCK_SECRET`, and `ALLOWED_ORIGINS` as they are. Do not commit or print the file.
+
+```bash
+aws lambda update-function-configuration \
+  --function-name price-submission-handler \
+  --profile engineering \
+  --region us-east-1 \
+  --environment file:///tmp/price-submission-env.json
+
+aws lambda wait function-updated \
+  --function-name price-submission-handler \
+  --profile engineering \
+  --region us-east-1
+```
+
+3. Merge the PR. The workflow runs `npm ci` and `npm run deploy` in `api/`. The zip includes `index.js`, `lock-link.js`, `pay-notify.js`, `front-desk-event.js`, and `node_modules`.
+
+4. Submit as a ZZTEST patient with a Stripe test key. Expect one POST with `event` `payment_plan_submitted`, `test` true, and no name or email. The same `eventId` is not posted twice.
+
+5. Remove `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN` with the same get, edit, and update steps.
+
+6. Leave `PUMBLE_VIA_MAKE_ENABLED` unset or `true`. After the ZZTEST event lands, Matt snapshots Make scenario **3819523** and deletes module **#4** (Pumble). The Google Sheets row stays. That edit is not in this repo.
+
+### Rollback
+
+Stop notifications without a code change: remove `FRONT_DESK_WEBHOOK_URL` and `FRONT_DESK_WEBHOOK_TOKEN` from the function (same get, edit, and update as above). The helper skips, and the submission still returns success. Leave `MAKE_WEBHOOK_URL` and `PUMBLE_VIA_MAKE_ENABLED` so the sheet row keeps running.
+
+Restore the previous notifier: revert this change on `main` so the workflow deploys the old zip, then put `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN` back. The old code reads those names and does not read `FRONT_DESK_*`. Do not change Make scenario 3819523 as part of the rollback.
 
 ## Team Notes
 

@@ -217,39 +217,46 @@ Posted to AWS Lambda endpoint. Response may include `invoiceUrl` (Stripe hosted 
 
 ## Payment notification (JRDO-94)
 
-After the Stripe block (and the DynamoDB Stripe-id update), `price-submission-handler` POSTs a payment notification for the Grok Bot routine "Payment plan / payment notification". The call has a 5 second timeout. A failure, non-2xx response, or timeout is logged and does not change the submission response. The response body is not logged.
+After the Stripe block (and the DynamoDB Stripe-id update), `price-submission-handler` sends Front Desk event `payment_plan_submitted` through `api/front-desk-event.js`. That file is vendored from `grqg-dev/drray` `shared/front-desk-event` at `444f2ff`. The v1 envelope is `docs/front-desk-events.md` in that repo.
 
-Leave these unset until rollout. A missing URL skips the call with one log line:
+The helper has a 3 second timeout and one retry. It never throws. A skip, non-2xx response, or timeout is one log line (`event`, `eventId`, `status`) and does not change the submission response. The URL, token, body, and response are not logged. Name and email are not in the event.
 
-- `PAY_NOTIFY_WEBHOOK_URL` — routine webhook URL
-- `PAY_NOTIFY_WEBHOOK_TOKEN` — sender key, sent as `Authorization: Bearer <token>`. A value that already starts with `Bearer ` is not prefixed again.
+`api/pay-notify.js` calls `sendFrontDeskEvent`. The Lambda reads `FRONT_DESK_WEBHOOK_URL` and `FRONT_DESK_WEBHOOK_TOKEN`. It does not read `PAY_NOTIFY_WEBHOOK_URL` or `PAY_NOTIFY_WEBHOOK_TOKEN`.
+
+- `FRONT_DESK_WEBHOOK_URL` — https webhook. Missing, blank, or not https skips the call.
+- `FRONT_DESK_WEBHOOK_TOKEN` — sender key, sent as `Authorization: Bearer <token>`. A value that already starts with `Bearer ` is not prefixed again.
 - `PUMBLE_VIA_MAKE_ENABLED` — default `true` (also `1` / `yes`; set `false`, `0`, `no`, or `off` to skip). While true, `MAKE_WEBHOOK_URL` is still called with the raw submission so the Google Sheets row keeps running.
 
-Set `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN` on the Lambda itself (`aws lambda update-function-configuration --profile engineering`). Do not put them in Secrets Manager or in git. `PUMBLE_VIA_MAKE_ENABLED` stays on after Pumble is removed, because Make still writes the sheet.
+Set the Front Desk URL and token on the Lambda itself (`aws lambda update-function-configuration --profile engineering --region us-east-1`). Do not put them in Secrets Manager or in git. `PUMBLE_VIA_MAKE_ENABLED` stays on after Pumble is removed, because Make still writes the sheet. The package script copies `front-desk-event.js` into the zip. Runtime is Node.js 18+ (`fetch`).
 
-`testMode` is true when `STRIPE_SECRET_KEY` starts with `sk_test_` or `rk_test_`.
+`test` is true when `STRIPE_SECRET_KEY` starts with `sk_test_` or `rk_test_`, or when `name`, `email`, or `opportunityId` starts with `ZZTEST` (case-insensitive).
 
 ```javascript
 {
-  event: 'plan_selected' | 'payment_submitted', // plan and installment → plan_selected; full → payment_submitted
-  patientName,
-  paymentOption, // plan | installment | full
-  plan: { totalPrice, deposit, monthlyPayment, months, installments?, isSlidingScale, payoffDate },
-  amount, // deposit, or totalPrice when paymentOption is full
-  method, // plan → stripe_subscription_schedule; installment → stripe_scheduled_invoices; full → stripe_invoice
-  stripe: { customerId, invoiceId, invoiceUrl, subscriptionScheduleId, subscriptionId, futureInvoiceIds },
-  submissionId,
-  testMode,
-  timestamp // ISO UTC
+  version: 1,
+  event: 'payment_plan_submitted',
+  eventId: 'payment_plan_submitted:<submissionId>',
+  occurredAt, // ISO UTC
+  source: 'price-submission-handler',
+  test, // stripe test key, or a ZZTEST name / email / opportunityId
+  data: {
+    submissionId,
+    opportunityId, // only when the body includes a non-empty string
+    paymentOption, // plan | installment | full
+    amount, // deposit, or totalPrice when paymentOption is full
+    method, // plan → stripe_subscription_schedule; installment → stripe_scheduled_invoices; full → stripe_invoice
+    stripe: { customerId, invoiceId, invoiceUrl, subscriptionScheduleId, subscriptionId, futureInvoiceIds }
+  }
 }
 ```
 
-The same values are repeated on headers, because a routine webhook may drop the body: `X-Event-Type`, `X-Patient-Name` (URI-encoded), `X-Submission-Id`, `X-Stripe-Customer-Id`, `X-Stripe-Subscription-Id`, `X-Stripe-Invoice-Id`, `X-Amount`, `X-Payment-Option`.
-
-**Assumption for Matt / Finance:** `payment_submitted` is pay-in-full. Plan and installment submissions use `plan_selected`. There is no second ping when a payment later succeeds.
-
 ### Rollout
 
-1. Set `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN` on `price-submission-handler` with `--profile engineering`. Leave `PUMBLE_VIA_MAKE_ENABLED` unset or `true`. Do not create a Secrets Manager secret for these. Deploy the Lambda only after Matt confirms.
-2. Submit as a fake patient with Stripe test mode and no real customer. Confirm the routine receives the event.
-3. Make scenario **3819523** "Pricing Submission": snapshot the blueprint, then delete module **#4** (Pumble subscenario SCN_2036108, message `Pricing Submitted for {name}`) and link module #3 (Google Sheets) to module #2 (webhook respond). That Make edit is separate from this repo. The Lambda keeps calling Make so the sheet row continues.
+Deploy steps and rollback are in the README. Do not deploy until Matt confirms. Merging to `main` deploys `price-submission-handler`.
+
+1. Add `FRONT_DESK_WEBHOOK_URL` and `FRONT_DESK_WEBHOOK_TOKEN` on `price-submission-handler` with `--profile engineering`. Keep the old `PAY_NOTIFY_*` vars until the new code is confirmed. Leave `PUMBLE_VIA_MAKE_ENABLED` unset or `true`. Do not create a Secrets Manager secret.
+2. Merge. Submit as a ZZTEST patient with a Stripe test key. Confirm one `payment_plan_submitted` event with `test: true` and no name or email.
+3. Remove `PAY_NOTIFY_WEBHOOK_URL` and `PAY_NOTIFY_WEBHOOK_TOKEN`.
+4. Make scenario **3819523** "Pricing Submission": snapshot the blueprint, then delete module **#4** (Pumble subscenario SCN_2036108, message `Pricing Submitted for {name}`) and link module #3 (Google Sheets) to module #2 (webhook respond). That Make edit is separate from this repo. The Lambda keeps calling Make so the sheet row continues.
+
+To stop the ping without a code rollback, unset `FRONT_DESK_WEBHOOK_URL` and `FRONT_DESK_WEBHOOK_TOKEN`. The helper skips and the submission still succeeds.

@@ -1,6 +1,14 @@
-const https = require('https');
+'use strict';
 
-const NOTIFY_TIMEOUT_MS = 5000;
+// JRDO-94. Posts payment_plan_submitted through the vendored Front Desk helper.
+// Name, email, and other PHI stay out of the event and the logs.
+// A failed send must not reject: sendFrontDeskEvent never throws, and the
+// catch below is a backstop so the patient's submission still returns.
+
+const { sendFrontDeskEvent } = require('./front-desk-event');
+
+const EVENT = 'payment_plan_submitted';
+const SOURCE = 'price-submission-handler';
 
 function isPumbleViaMakeEnabled(env = process.env) {
   const raw = env.PUMBLE_VIA_MAKE_ENABLED;
@@ -10,18 +18,23 @@ function isPumbleViaMakeEnabled(env = process.env) {
   return value !== 'false' && value !== '0' && value !== 'no' && value !== 'off';
 }
 
-// Matt's sender key is the bearer value. Leave a value that already
-// starts with "Bearer " alone so the header is not "Bearer Bearer ...".
-function authorizationHeader(token) {
-  if (token == null) return null;
-  const value = String(token).trim();
-  if (!value) return null;
-  if (/^Bearer\s+/i.test(value)) return value;
-  return `Bearer ${value}`;
+function isStripeTestMode(stripeKey) {
+  return typeof stripeKey === 'string'
+    && (stripeKey.startsWith('sk_test_') || stripeKey.startsWith('rk_test_'));
 }
 
-function paymentEvent(paymentOption) {
-  return paymentOption === 'full' ? 'payment_submitted' : 'plan_selected';
+function startsWithZztest(value) {
+  return typeof value === 'string' && value.trim().toLowerCase().startsWith('zztest');
+}
+
+// A ZZTEST record is a fixture. The routine then prefixes its note [TEST]
+// and skips follow-ups. Checked here so the flag can be set without
+// putting the name or email on the event.
+function isZztestRecord(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  return startsWithZztest(payload.name)
+    || startsWithZztest(payload.email)
+    || startsWithZztest(payload.opportunityId);
 }
 
 function paymentMethod(paymentOption) {
@@ -30,27 +43,19 @@ function paymentMethod(paymentOption) {
   return 'stripe_invoice';
 }
 
-function isStripeTestMode(stripeKey) {
-  return typeof stripeKey === 'string'
-    && (stripeKey.startsWith('sk_test_') || stripeKey.startsWith('rk_test_'));
+function paymentAmount(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const amount = payload.paymentOption === 'full' ? payload.totalPrice : payload.deposit;
+  return typeof amount === 'number' ? amount : null;
 }
 
-function buildPaymentNotification({ payload, submissionId, stripe = {}, stripeKey, now = new Date() }) {
-  const paymentOption = payload.paymentOption;
-  const amount = paymentOption === 'full' ? payload.totalPrice : payload.deposit;
-  const plan = {
-    totalPrice: payload.totalPrice,
-    deposit: payload.deposit ?? null,
-    monthlyPayment: payload.monthlyPayment ?? null,
-    months: payload.months ?? null,
-    isSlidingScale: Boolean(payload.isSlidingScale),
-    payoffDate: payload.payoffDate || null,
-  };
-  if (Array.isArray(payload.installments)) {
-    plan.installments = payload.installments;
-  }
+function opportunityIdFrom(payload) {
+  if (!payload || typeof payload.opportunityId !== 'string') return '';
+  return payload.opportunityId.trim();
+}
 
-  const stripeInfo = {
+function stripeInfo(stripe = {}) {
+  return {
     customerId: stripe.customerId || null,
     invoiceId: stripe.invoiceId || null,
     invoiceUrl: stripe.invoiceUrl || null,
@@ -58,122 +63,59 @@ function buildPaymentNotification({ payload, submissionId, stripe = {}, stripeKe
     subscriptionId: stripe.subscriptionId || null,
     futureInvoiceIds: stripe.futureInvoiceIds || null,
   };
+}
 
-  const body = {
-    event: paymentEvent(paymentOption),
-    patientName: payload.name,
-    paymentOption,
-    plan,
-    amount,
-    method: paymentMethod(paymentOption),
-    stripe: stripeInfo,
+function buildFrontDeskPaymentEvent({ payload, submissionId, stripe, stripeKey }) {
+  const opportunityId = opportunityIdFrom(payload);
+  const data = {
     submissionId,
-    testMode: isStripeTestMode(stripeKey),
-    timestamp: (now instanceof Date ? now : new Date(now)).toISOString(),
+    ...(opportunityId ? { opportunityId } : {}),
+    paymentOption: payload && payload.paymentOption,
+    amount: paymentAmount(payload),
+    method: paymentMethod(payload && payload.paymentOption),
+    stripe: stripeInfo(stripe),
   };
 
-  const headers = {
-    'X-Event-Type': body.event,
-    'X-Patient-Name': encodeURIComponent(payload.name || ''),
-    'X-Submission-Id': submissionId || '',
-    'X-Stripe-Customer-Id': stripeInfo.customerId || '',
-    'X-Stripe-Subscription-Id': stripeInfo.subscriptionId || '',
-    'X-Stripe-Invoice-Id': stripeInfo.invoiceId || '',
-    'X-Amount': amount == null ? '' : String(amount),
-    'X-Payment-Option': paymentOption || '',
+  const id = submissionId == null ? '' : String(submissionId).trim();
+  return {
+    event: EVENT,
+    eventId: id ? `${EVENT}:${id}` : '',
+    source: SOURCE,
+    test: isStripeTestMode(stripeKey) || isZztestRecord(payload),
+    data,
   };
-
-  return { body, headers };
 }
 
-function withAuthorization(headers, token) {
-  const authorization = authorizationHeader(token);
-  if (!authorization) return { ...headers };
-  return { ...headers, Authorization: authorization };
+function notifyOptions(input) {
+  const options = {};
+  if (input.fetchImpl) options.fetchImpl = input.fetchImpl;
+  if (input.env) options.env = input.env;
+  if (input.logger) options.logger = input.logger;
+  if (Number.isFinite(input.timeoutMs)) options.timeoutMs = input.timeoutMs;
+  if (input.now instanceof Date) options.now = input.now;
+  return options;
 }
 
-function postPaymentNotification(url, body, headers, timeoutMs, httpsImpl = https) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const done = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      fn(value);
-    };
-
-    let urlObj;
-    try {
-      urlObj = new URL(url);
-    } catch (err) {
-      done(reject, err);
-      return;
-    }
-
-    const postData = JSON.stringify(body);
-    const req = httpsImpl.request({
-      hostname: urlObj.hostname,
-      port: urlObj.port || 443,
-      path: `${urlObj.pathname}${urlObj.search}`,
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
-      },
-    }, (res) => {
-      res.on('data', () => {});
-      res.on('end', () => done(resolve, res.statusCode));
-    });
-
-    req.setTimeout(timeoutMs, () => {
-      const error = new Error('timeout');
-      error.code = 'TIMEOUT';
-      done(reject, error);
-      req.destroy(error);
-    });
-
-    req.on('error', (error) => done(reject, error));
-    req.write(postData);
-    req.end();
-  });
-}
-
-async function sendPaymentNotification({ payload, submissionId, stripe, stripeKey, httpsImpl }) {
-  const url = process.env.PAY_NOTIFY_WEBHOOK_URL;
-  if (url == null || String(url).trim() === '') {
-    console.log('PAY_NOTIFY_WEBHOOK_URL not set — skipping payment notification:', submissionId);
-    return;
-  }
-
+async function sendPaymentNotification(input = {}) {
+  const submissionId = input.submissionId;
   try {
-    const { body, headers } = buildPaymentNotification({
-      payload,
-      submissionId,
-      stripe,
-      stripeKey,
-    });
-    const statusCode = await postPaymentNotification(
-      String(url).trim(),
-      body,
-      withAuthorization(headers, process.env.PAY_NOTIFY_WEBHOOK_TOKEN),
-      NOTIFY_TIMEOUT_MS,
-      httpsImpl,
-    );
-    console.log('Payment notification status:', statusCode);
-  } catch (err) {
-    if (err && err.code === 'TIMEOUT') {
-      console.error('Payment notification timed out:', submissionId);
-      return;
-    }
+    return await sendFrontDeskEvent(buildFrontDeskPaymentEvent(input), notifyOptions(input));
+  } catch {
     console.error('Payment notification failed:', submissionId);
+    return {
+      ok: false,
+      status: 'error',
+      eventId: submissionId ? `${EVENT}:${submissionId}` : undefined,
+    };
   }
 }
 
 module.exports = {
-  NOTIFY_TIMEOUT_MS,
+  EVENT,
+  SOURCE,
   isPumbleViaMakeEnabled,
-  authorizationHeader,
   isStripeTestMode,
-  buildPaymentNotification,
+  isZztestRecord,
+  buildFrontDeskPaymentEvent,
   sendPaymentNotification,
 };
