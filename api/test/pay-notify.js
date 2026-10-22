@@ -853,6 +853,9 @@ describe('price submission handler notification', () => {
   });
 });
 
+const NOW_SEC = Math.floor(Date.now() / 1000);
+const DAY = 24 * 60 * 60;
+
 describe('JRDO-169 duplicate payment-plan check', () => {
   function assertNothingCreated(response, json, status, code) {
     assert.equal(response.statusCode, status);
@@ -873,25 +876,25 @@ describe('JRDO-169 duplicate payment-plan check', () => {
   const env = () => ({ ...stripeEnv(), ...frontDeskEnv(), MAKE_WEBHOOK_URL: MAKE_URL });
 
   it('blocks when the customer already has an open calculator deposit invoice', async () => {
-    existing.invoices = [{ id: 'in_old', status: 'open', metadata: { source: 'pricing-calculator', paymentOption: 'plan' } }];
+    existing.invoices = [{ id: 'in_old', status: 'open', created: NOW_SEC, metadata: { source: 'pricing-calculator', paymentOption: 'plan' } }];
     const { response, json } = await submit(submission(), env());
     assertNothingCreated(response, json, 409, 'duplicate_plan');
   });
 
   it('blocks when the deposit invoice is already paid', async () => {
-    existing.invoices = [{ id: 'in_old', status: 'paid', metadata: { source: 'pricing-calculator' } }];
+    existing.invoices = [{ id: 'in_old', status: 'paid', created: NOW_SEC, metadata: { source: 'pricing-calculator' } }];
     const { response, json } = await submit(submission(), env());
     assertNothingCreated(response, json, 409, 'duplicate_plan');
   });
 
   it('blocks when a not-started calculator schedule exists', async () => {
-    existing.schedules = [{ id: 'sub_sched_old', status: 'not_started', phases: [{ metadata: { source: 'drray-pricing-calculator' } }] }];
+    existing.schedules = [{ id: 'sub_sched_old', status: 'not_started', created: NOW_SEC, phases: [{ metadata: { source: 'drray-pricing-calculator' } }] }];
     const { response, json } = await submit(submission(), env());
     assertNothingCreated(response, json, 409, 'duplicate_plan');
   });
 
   it('blocks by opportunity id when the email differs', async () => {
-    existing.search = [{ id: 'in_opp', status: 'open', metadata: { source: 'pricing-calculator', opportunityId: OPPORTUNITY_ID } }];
+    existing.search = [{ id: 'in_opp', status: 'open', created: NOW_SEC, metadata: { source: 'pricing-calculator', opportunityId: OPPORTUNITY_ID } }];
     const { response, json } = await submit(submission({ opportunityId: OPPORTUNITY_ID }), env());
     assertNothingCreated(response, json, 409, 'duplicate_plan');
   });
@@ -904,16 +907,40 @@ describe('JRDO-169 duplicate payment-plan check', () => {
 
   it('ignores void/draft invoices, canceled schedules and non-calculator invoices', async () => {
     existing.invoices = [
-      { id: 'in_void', status: 'void', metadata: { source: 'pricing-calculator' } },
-      { id: 'in_draft', status: 'draft', metadata: { source: 'pricing-calculator' } },
-      { id: 'in_other', status: 'open', metadata: { source: 'something-else' } },
-      { id: 'in_future_1', status: 'open', metadata: { source: 'pricing-calculator', installmentIndex: '1' } },
+      { id: 'in_void', status: 'void', created: NOW_SEC, metadata: { source: 'pricing-calculator' } },
+      { id: 'in_draft', status: 'draft', created: NOW_SEC, metadata: { source: 'pricing-calculator' } },
+      { id: 'in_other', status: 'open', created: NOW_SEC, metadata: { source: 'something-else' } },
+      { id: 'in_future_1', status: 'open', created: NOW_SEC, metadata: { source: 'pricing-calculator', installmentIndex: '1' } },
     ];
-    existing.schedules = [{ id: 'sub_sched_c', status: 'canceled', metadata: { source: 'drray-pricing-calculator' } }];
+    existing.schedules = [{ id: 'sub_sched_c', status: 'canceled', created: NOW_SEC, metadata: { source: 'drray-pricing-calculator' } }];
     const { response, json } = await submit(submission(), env());
     assert.equal(response.statusCode, 200);
     assert.equal(json.success, true);
     assert.equal(sequence.includes('stripe-schedule'), true);
+  });
+
+  it('allows a repeat customer whose plan is older than 7 days', async () => {
+    existing.invoices = [{ id: 'in_old', status: 'paid', created: NOW_SEC - 8 * DAY, metadata: { source: 'pricing-calculator' } }];
+    existing.schedules = [{ id: 'sub_sched_old', status: 'active', created: NOW_SEC - 30 * DAY, metadata: { source: 'drray-pricing-calculator' } }];
+    existing.search = [{ id: 'in_opp_old', status: 'open', created: NOW_SEC - 10 * DAY, metadata: { source: 'pricing-calculator' } }];
+    const { response, json } = await submit(submission({ opportunityId: OPPORTUNITY_ID }), env());
+    assert.equal(response.statusCode, 200);
+    assert.equal(json.success, true);
+    assert.equal(sequence.includes('stripe-invoice'), true);
+    assert.equal(sequence.includes('stripe-schedule'), true);
+  });
+
+  it('blocks a plan created 6 days ago (inside the 7-day window)', async () => {
+    existing.invoices = [{ id: 'in_recent', status: 'open', created: NOW_SEC - 6 * DAY, metadata: { source: 'pricing-calculator' } }];
+    const { response, json } = await submit(submission(), env());
+    assertNothingCreated(response, json, 409, 'duplicate_plan');
+  });
+
+  it('blocks a recent schedule even when the old deposit invoice is outside the window', async () => {
+    existing.invoices = [{ id: 'in_old', status: 'paid', created: NOW_SEC - 20 * DAY, metadata: { source: 'pricing-calculator' } }];
+    existing.schedules = [{ id: 'sub_sched_new', status: 'not_started', created: NOW_SEC - DAY, metadata: { source: 'drray-pricing-calculator' } }];
+    const { response, json } = await submit(submission(), env());
+    assertNothingCreated(response, json, 409, 'duplicate_plan');
   });
 
   it('passes stable idempotency keys derived from the submission', async () => {

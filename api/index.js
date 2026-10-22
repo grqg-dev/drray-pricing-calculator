@@ -329,7 +329,13 @@ function submissionIdempotencyBase(payload) {
   return 'pc-' + crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 40);
 }
 
+// Only plans created in this window block a resubmit; older plans (repeat customers) don't.
+const DEDUPE_WINDOW_DAYS = 7;
 const OPEN_OR_PAID = new Set(['open', 'paid']);
+
+function isRecent(obj, sinceSec) {
+  return typeof obj.created === 'number' && obj.created >= sinceSec;
+}
 const LIVE_SCHEDULE = new Set(['not_started', 'active']);
 
 function isCalculatorInvoice(inv) {
@@ -349,22 +355,24 @@ function isCalculatorSchedule(sched) {
  * Returns { type, id } or null. Throws on Stripe errors (caller fails closed).
  */
 async function findExistingPlan(stripe, { email, opportunityId }) {
+  const since = Math.floor(Date.now() / 1000) - DEDUPE_WINDOW_DAYS * 24 * 60 * 60;
+  const recent = (pred) => (o) => pred(o) && isRecent(o, since);
   const customers = await stripe.customers.list({ email, limit: 10 });
   for (const customer of customers.data || []) {
-    const invoices = await stripe.invoices.list({ customer: customer.id, limit: 50 });
-    const inv = (invoices.data || []).find(isCalculatorInvoice);
+    const invoices = await stripe.invoices.list({ customer: customer.id, created: { gte: since }, limit: 50 });
+    const inv = (invoices.data || []).find(recent(isCalculatorInvoice));
     if (inv) return { type: 'invoice', id: inv.id };
-    const schedules = await stripe.subscriptionSchedules.list({ customer: customer.id, limit: 50 });
-    const sched = (schedules.data || []).find(isCalculatorSchedule);
+    const schedules = await stripe.subscriptionSchedules.list({ customer: customer.id, created: { gte: since }, limit: 50 });
+    const sched = (schedules.data || []).find(recent(isCalculatorSchedule));
     if (sched) return { type: 'schedule', id: sched.id };
   }
   const opp = typeof opportunityId === 'string' ? opportunityId.trim() : '';
   if (opp && /^[A-Za-z0-9_-]+$/.test(opp)) {
     const found = await stripe.invoices.search({
-      query: `metadata['opportunityId']:'${opp}'`,
+      query: `metadata['opportunityId']:'${opp}' AND created>=${since}`,
       limit: 20,
     });
-    const inv = (found.data || []).find(isCalculatorInvoice);
+    const inv = (found.data || []).find(recent(isCalculatorInvoice));
     if (inv) return { type: 'invoice', id: inv.id };
   }
   return null;
@@ -619,4 +627,4 @@ function callWebhook(url, payload) {
   });
 }
 
-exports._test = { findExistingPlan, submissionIdempotencyBase, CONTACT_OFFICE_MESSAGE };
+exports._test = { DEDUPE_WINDOW_DAYS, findExistingPlan, submissionIdempotencyBase, CONTACT_OFFICE_MESSAGE };
