@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const https = require('https');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const Stripe = require('stripe');
 const { gateLockedRequest } = require('./lock-link');
@@ -14,6 +15,9 @@ const CORS_HEADERS = {
 };
 
 const INSTALLMENT_DAYS_UNTIL_DUE = 15;
+
+// JRDO-169: shown to the patient on a duplicate or any payment-flow error.
+const CONTACT_OFFICE_MESSAGE = 'Something went wrong setting up your payment plan. Please contact our office at (805) 364-0996 and we will help you finish.';
 
 exports.handler = async (event) => {
   console.log('Received request:', event && event.httpMethod ? event.httpMethod : 'unknown');
@@ -82,6 +86,28 @@ exports.handler = async (event) => {
       };
     }
 
+    // JRDO-169: refuse a resubmit before anything is written (DynamoDB, Make, Stripe).
+    // Matt's call: don't reuse or redirect; tell the patient to contact the office.
+    const idempotencyBase = STRIPE_SECRET_KEY && STRIPE_DEPOSIT_PRODUCT_ID
+      ? submissionIdempotencyBase(payload)
+      : null;
+    if (idempotencyBase) {
+      let existing;
+      try {
+        existing = await findExistingPlan(Stripe(STRIPE_SECRET_KEY), {
+          email: payload.email,
+          opportunityId: payload.opportunityId,
+        });
+      } catch (checkError) {
+        console.error('[DEDUPE] Duplicate check failed:', checkError && checkError.message);
+        return contactOfficeResponse(responseHeaders, 502, 'payment_flow_error');
+      }
+      if (existing) {
+        console.log('[DEDUPE] Blocked duplicate submission; existing', existing.type, existing.id);
+        return contactOfficeResponse(responseHeaders, 409, 'duplicate_plan');
+      }
+    }
+
     // Generate submission ID
     const submissionId = uuidv4();
     console.log('Generated submissionId:', submissionId);
@@ -134,6 +160,7 @@ exports.handler = async (event) => {
     let subscriptionScheduleId = null;
     let subscriptionId = null;
     let stripeFutureInvoiceIds = null;
+    let stripeFailed = false;
 
     if (STRIPE_SECRET_KEY && STRIPE_DEPOSIT_PRODUCT_ID) {
       try {
@@ -146,6 +173,8 @@ exports.handler = async (event) => {
           totalPrice: payload.totalPrice,
           paymentOption: payload.paymentOption,
           months: payload.months,
+          opportunityId: payload.opportunityId,
+          idempotencyBase,
           submissionId
         });
         invoiceUrl = stripeResult.invoiceUrl;
@@ -166,6 +195,8 @@ exports.handler = async (event) => {
             productId: STRIPE_MONTHLY_PRODUCT_ID,
             monthlyAmountCents,
             months: payload.months,
+            opportunityId: payload.opportunityId,
+            idempotencyBase,
             submissionId,
           });
           subscriptionScheduleId = schedule.id;
@@ -210,7 +241,9 @@ exports.handler = async (event) => {
           ExpressionAttributeValues: updateValues
         }).promise();
       } catch (stripeError) {
-        // Log but don't fail the whole request — DynamoDB + webhook already succeeded
+        // DynamoDB + webhook already succeeded; the office still gets the event below,
+        // but the patient is told to contact the office (JRDO-169).
+        stripeFailed = true;
         console.error('Stripe invoice creation failed:', stripeError);
       }
     } else {
@@ -237,6 +270,10 @@ exports.handler = async (event) => {
       console.error('Payment notification failed:', submissionId);
     }
 
+    if (stripeFailed) {
+      return contactOfficeResponse(responseHeaders, 502, 'payment_flow_error', submissionId);
+    }
+
     // Return success
     return {
       statusCode: 200,
@@ -255,17 +292,90 @@ exports.handler = async (event) => {
       statusCode: 500,
       headers: responseHeaders,
       body: JSON.stringify({
-        error: 'Failed to process submission',
-        message: error.message
+        error: CONTACT_OFFICE_MESSAGE,
+        code: 'payment_flow_error'
       })
     };
   }
 };
 
+function contactOfficeResponse(headers, statusCode, code, submissionId) {
+  return {
+    statusCode,
+    headers,
+    body: JSON.stringify({
+      error: CONTACT_OFFICE_MESSAGE,
+      code,
+      ...(submissionId && { submissionId }),
+    }),
+  };
+}
+
+/**
+ * Stable per-submission key base (JRDO-169 backstop). Same patient + opportunity +
+ * plan terms within Stripe's 24h idempotency window replays instead of creating.
+ */
+function submissionIdempotencyBase(payload) {
+  const parts = [
+    String(payload.email || '').trim().toLowerCase(),
+    String(payload.opportunityId || '').trim(),
+    payload.paymentOption,
+    payload.totalPrice,
+    payload.deposit,
+    payload.monthlyPayment,
+    payload.months,
+    JSON.stringify(payload.installments || null),
+  ];
+  return 'pc-' + crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 40);
+}
+
+const OPEN_OR_PAID = new Set(['open', 'paid']);
+const LIVE_SCHEDULE = new Set(['not_started', 'active']);
+
+function isCalculatorInvoice(inv) {
+  return inv && OPEN_OR_PAID.has(inv.status) && inv.metadata && inv.metadata.source === 'pricing-calculator'
+    && !inv.metadata.installmentIndex;
+}
+
+function isCalculatorSchedule(sched) {
+  if (!sched || !LIVE_SCHEDULE.has(sched.status)) return false;
+  if (sched.metadata && sched.metadata.source === 'drray-pricing-calculator') return true;
+  return (sched.phases || []).some((ph) => ph.metadata && ph.metadata.source === 'drray-pricing-calculator');
+}
+
+/**
+ * JRDO-169: find an open/paid calculator deposit invoice or a not-started/active
+ * calculator subscription schedule for the same Stripe customer email or opportunity.
+ * Returns { type, id } or null. Throws on Stripe errors (caller fails closed).
+ */
+async function findExistingPlan(stripe, { email, opportunityId }) {
+  const customers = await stripe.customers.list({ email, limit: 10 });
+  for (const customer of customers.data || []) {
+    const invoices = await stripe.invoices.list({ customer: customer.id, limit: 50 });
+    const inv = (invoices.data || []).find(isCalculatorInvoice);
+    if (inv) return { type: 'invoice', id: inv.id };
+    const schedules = await stripe.subscriptionSchedules.list({ customer: customer.id, limit: 50 });
+    const sched = (schedules.data || []).find(isCalculatorSchedule);
+    if (sched) return { type: 'schedule', id: sched.id };
+  }
+  const opp = typeof opportunityId === 'string' ? opportunityId.trim() : '';
+  if (opp && /^[A-Za-z0-9_-]+$/.test(opp)) {
+    const found = await stripe.invoices.search({
+      query: `metadata['opportunityId']:'${opp}'`,
+      limit: 20,
+    });
+    const inv = (found.data || []).find(isCalculatorInvoice);
+    if (inv) return { type: 'invoice', id: inv.id };
+  }
+  return null;
+}
+
 /**
  * Create a Stripe invoice for the deposit amount
  */
-async function createStripeInvoice({ stripeKey, productId, name, email, deposit, totalPrice, paymentOption, months, submissionId }) {
+async function createStripeInvoice({ stripeKey, productId, name, email, deposit, totalPrice, paymentOption, months, opportunityId, idempotencyBase, submissionId }) {
+  const idem = (step) => (idempotencyBase ? { idempotencyKey: `${idempotencyBase}:${step}` } : undefined);
+  const oppMeta = typeof opportunityId === 'string' && opportunityId.trim() ? { opportunityId: opportunityId.trim() } : {};
   const stripe = Stripe(stripeKey);
 
   // Determine the invoice amount (in cents)
@@ -289,7 +399,7 @@ async function createStripeInvoice({ stripeKey, productId, name, email, deposit,
       customer = await stripe.customers.update(customer.id, { name });
     }
   } else {
-    customer = await stripe.customers.create({ name, email });
+    customer = await stripe.customers.create({ name, email }, idem('customer'));
     console.log('Created new Stripe customer:', customer.id);
   }
 
@@ -308,7 +418,7 @@ async function createStripeInvoice({ stripeKey, productId, name, email, deposit,
       totalPrice: String(totalPrice),
       ...(paymentOption === 'plan' && { months: String(months) })
     }
-  });
+  }, idem('deposit-item'));
 
   // Create the invoice
   const invoice = await stripe.invoices.create({
@@ -320,9 +430,10 @@ async function createStripeInvoice({ stripeKey, productId, name, email, deposit,
     metadata: {
       submissionId,
       paymentOption,
+      ...oppMeta,
       source: 'pricing-calculator'
     }
-  });
+  }, idem('deposit-invoice'));
 
   // Finalize the invoice (moves from draft → open)
   const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
@@ -342,7 +453,8 @@ async function createStripeInvoice({ stripeKey, productId, name, email, deposit,
  * Create a Stripe subscription schedule for monthly payments.
  * Auto-sends invoices each month and auto-cancels after N iterations.
  */
-async function createSubscriptionSchedule(stripe, { customerId, productId, monthlyAmountCents, months, submissionId }) {
+async function createSubscriptionSchedule(stripe, { customerId, productId, monthlyAmountCents, months, opportunityId, idempotencyBase, submissionId }) {
+  const oppMeta = typeof opportunityId === 'string' && opportunityId.trim() ? { opportunityId: opportunityId.trim() } : {};
   // Search for an existing active price with the same amount under this product
   console.log('[SUBSCRIPTION] Searching for existing price:', { productId, monthlyAmountCents });
   const existingPrices = await stripe.prices.list({
@@ -379,6 +491,7 @@ async function createSubscriptionSchedule(stripe, { customerId, productId, month
     customer: customerId,
     start_date: startDate,
     end_behavior: 'cancel',
+    metadata: { submissionId, ...oppMeta, source: 'drray-pricing-calculator' },
     phases: [{
       items: [{ price: price.id, quantity: 1 }],
       collection_method: 'send_invoice',
@@ -392,7 +505,7 @@ async function createSubscriptionSchedule(stripe, { customerId, productId, month
         source: 'drray-pricing-calculator',
       },
     }],
-  });
+  }, idempotencyBase ? { idempotencyKey: `${idempotencyBase}:schedule` } : undefined);
   console.log('[SUBSCRIPTION] Schedule created:', JSON.stringify({
     scheduleId: schedule.id,
     subscriptionId: schedule.subscription,
@@ -505,3 +618,5 @@ function callWebhook(url, payload) {
     req.end();
   });
 }
+
+exports._test = { findExistingPlan, submissionIdempotencyBase, CONTACT_OFFICE_MESSAGE };

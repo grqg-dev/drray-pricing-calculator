@@ -13,6 +13,8 @@ export const CUSTOM_SCHEDULE_MIN_DEPOSIT_FRACTION = 0.50;
 export const PAYMENT_INTERVALS = [1, 2, 3];
 /** Installment invoices are emailed this many days before each due date (api INSTALLMENT_DAYS_UNTIL_DUE) */
 export const INVOICE_LEAD_DAYS = 15;
+// JRDO-169: shown on any submission failure, including a blocked duplicate plan.
+export const SUBMIT_CONTACT_OFFICE_MESSAGE = 'Something went wrong setting up your payment plan. Please contact our office at (805) 364-0996 and we will help you finish.';
 export const SUBMISSION_API_URL = import.meta.env.VITE_SUBMISSION_API_URL || 'https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/price-submission';
 
 // ── Formatting ─────────────────────────────────────────────

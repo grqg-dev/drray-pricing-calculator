@@ -39,6 +39,9 @@ const logs = [];
 const errors = [];
 const behaviors = {};
 let stripeFails = false;
+let stripeCreateFails = false;
+const existing = { invoices: [], schedules: [], search: [] };
+const idemKeys = [];
 
 function formatArg(arg) {
   if (typeof arg === 'string') return arg;
@@ -170,15 +173,19 @@ Module._load = function load(request, parent, isMain) {
       }
       return {
         customers: {
-          list: async () => ({ data: [] }),
-          create: async () => ({ id: 'cus_zztest', name: PATIENT, email: EMAIL }),
+          list: async () => ({ data: existing.invoices.length || existing.schedules.length ? [{ id: 'cus_zztest', name: PATIENT, email: EMAIL }] : [] }),
+          create: async (_p, opts) => { idemKeys.push(opts && opts.idempotencyKey); return { id: 'cus_zztest', name: PATIENT, email: EMAIL }; },
           update: async (id, data) => ({ id, ...data }),
         },
         invoiceItems: {
           create: async () => ({ id: 'ii_zztest' }),
         },
         invoices: {
-          create: async (params) => {
+          list: async () => ({ data: existing.invoices }),
+          search: async () => ({ data: existing.search }),
+          create: async (params, opts) => {
+            if (stripeCreateFails) throw new Error('stripe create failed');
+            idemKeys.push(opts && opts.idempotencyKey);
             sequence.push('stripe-invoice');
             if (params.metadata && params.metadata.installmentIndex) {
               return { id: `in_future_${params.metadata.installmentIndex}` };
@@ -196,7 +203,9 @@ Module._load = function load(request, parent, isMain) {
           create: async () => ({ id: 'price_zztest' }),
         },
         subscriptionSchedules: {
-          create: async () => {
+          list: async () => ({ data: existing.schedules }),
+          create: async (_p, opts) => {
+            idemKeys.push(opts && opts.idempotencyKey);
             sequence.push('stripe-schedule');
             return {
               id: 'sub_sched_zztest',
@@ -334,6 +343,11 @@ beforeEach(() => {
   logs.length = 0;
   errors.length = 0;
   stripeFails = false;
+  stripeCreateFails = false;
+  existing.invoices = [];
+  existing.schedules = [];
+  existing.search = [];
+  idemKeys.length = 0;
   resetFrontDeskEventForTests();
   for (const key of Object.keys(behaviors)) delete behaviors[key];
   for (const key of MANAGED_ENV) delete process.env[key];
@@ -800,7 +814,7 @@ describe('price submission handler notification', () => {
     assert.equal(response.statusCode, 500);
     assert.equal(requestsTo(FRONT_DESK_HOST).length, 0);
     assert.equal(requestsTo(MAKE_HOST).length, 1);
-    assert.equal(json.message, 'Webhook returned status 500');
+    assert.equal(json.code, 'payment_flow_error');
   });
 
   it('does not return or log a Make error body that contains a name or email', async () => {
@@ -810,36 +824,110 @@ describe('price submission handler notification', () => {
       ...frontDeskEnv(),
     });
     assert.equal(response.statusCode, 500);
-    assert.equal(json.message.includes(PATIENT), false);
-    assert.equal(json.message.includes(EMAIL), false);
+    assert.equal(json.error.includes('(805) 364-0996'), true);
+    assert.equal(response.body.includes(PATIENT), false);
+    assert.equal(response.body.includes(EMAIL), false);
     assert.equal(requestsTo(FRONT_DESK_HOST).length, 0);
     const text = `${logs.join('\n')}\n${errors.join('\n')}\n${response.body}`;
     assert.equal(text.includes(PATIENT), false);
     assert.equal(text.includes(EMAIL), false);
   });
 
-  it('notifies with empty Stripe ids when Stripe throws', async () => {
-    stripeFails = true;
+  it('notifies the office but tells the patient to call when Stripe creation throws', async () => {
+    stripeCreateFails = true;
     const { response, json } = await submit(submission(), {
       ...stripeEnv(),
       ...frontDeskEnv(),
     });
-    assert.equal(response.statusCode, 200);
-    assert.equal(json.success, true);
+    assert.equal(response.statusCode, 502);
+    assert.equal(json.code, 'payment_flow_error');
+    assert.match(json.error, /contact our office at \(805\) 364-0996/);
     assert.equal(json.invoiceUrl, undefined);
     assert.equal(sequence.includes('dynamo-update'), false);
     const sent = JSON.parse(requestsTo(FRONT_DESK_HOST)[0].body);
-    assert.deepEqual(sent.data.stripe, {
-      customerId: null,
-      invoiceId: null,
-      invoiceUrl: null,
-      subscriptionScheduleId: null,
-      subscriptionId: null,
-      futureInvoiceIds: null,
-    });
+    assert.equal(sent.data.stripe.invoiceId, null);
+    assert.equal(sent.data.stripe.subscriptionScheduleId, null);
     assert.equal(sent.test, true);
-    assert.equal(sent.event, 'payment_plan_submitted');
     assertEnvelopeHasNoPhi(sent);
     assertLogsSafe(json.submissionId);
   });
 });
+
+describe('JRDO-169 duplicate payment-plan check', () => {
+  function assertNothingCreated(response, json, status, code) {
+    assert.equal(response.statusCode, status);
+    assert.equal(json.code, code);
+    assert.match(json.error, /contact our office at \(805\) 364-0996/);
+    assert.equal(json.invoiceUrl, undefined);
+    assert.equal(json.submissionId, undefined);
+    for (const step of ['dynamo-put', 'dynamo-update', 'stripe-invoice', 'stripe-schedule']) {
+      assert.equal(sequence.includes(step), false, step);
+    }
+    assert.equal(requestsTo(MAKE_HOST).length, 0);
+    assert.equal(requestsTo(FRONT_DESK_HOST).length, 0);
+    const text = `${logs.join('\n')}\n${errors.join('\n')}\n${response.body}`;
+    assert.equal(text.includes(PATIENT), false);
+    assert.equal(text.includes(EMAIL), false);
+  }
+
+  const env = () => ({ ...stripeEnv(), ...frontDeskEnv(), MAKE_WEBHOOK_URL: MAKE_URL });
+
+  it('blocks when the customer already has an open calculator deposit invoice', async () => {
+    existing.invoices = [{ id: 'in_old', status: 'open', metadata: { source: 'pricing-calculator', paymentOption: 'plan' } }];
+    const { response, json } = await submit(submission(), env());
+    assertNothingCreated(response, json, 409, 'duplicate_plan');
+  });
+
+  it('blocks when the deposit invoice is already paid', async () => {
+    existing.invoices = [{ id: 'in_old', status: 'paid', metadata: { source: 'pricing-calculator' } }];
+    const { response, json } = await submit(submission(), env());
+    assertNothingCreated(response, json, 409, 'duplicate_plan');
+  });
+
+  it('blocks when a not-started calculator schedule exists', async () => {
+    existing.schedules = [{ id: 'sub_sched_old', status: 'not_started', phases: [{ metadata: { source: 'drray-pricing-calculator' } }] }];
+    const { response, json } = await submit(submission(), env());
+    assertNothingCreated(response, json, 409, 'duplicate_plan');
+  });
+
+  it('blocks by opportunity id when the email differs', async () => {
+    existing.search = [{ id: 'in_opp', status: 'open', metadata: { source: 'pricing-calculator', opportunityId: OPPORTUNITY_ID } }];
+    const { response, json } = await submit(submission({ opportunityId: OPPORTUNITY_ID }), env());
+    assertNothingCreated(response, json, 409, 'duplicate_plan');
+  });
+
+  it('fails closed when the duplicate check itself errors', async () => {
+    stripeFails = true;
+    const { response, json } = await submit(submission(), env());
+    assertNothingCreated(response, json, 502, 'payment_flow_error');
+  });
+
+  it('ignores void/draft invoices, canceled schedules and non-calculator invoices', async () => {
+    existing.invoices = [
+      { id: 'in_void', status: 'void', metadata: { source: 'pricing-calculator' } },
+      { id: 'in_draft', status: 'draft', metadata: { source: 'pricing-calculator' } },
+      { id: 'in_other', status: 'open', metadata: { source: 'something-else' } },
+      { id: 'in_future_1', status: 'open', metadata: { source: 'pricing-calculator', installmentIndex: '1' } },
+    ];
+    existing.schedules = [{ id: 'sub_sched_c', status: 'canceled', metadata: { source: 'drray-pricing-calculator' } }];
+    const { response, json } = await submit(submission(), env());
+    assert.equal(response.statusCode, 200);
+    assert.equal(json.success, true);
+    assert.equal(sequence.includes('stripe-schedule'), true);
+  });
+
+  it('passes stable idempotency keys derived from the submission', async () => {
+    await submit(submission({ opportunityId: OPPORTUNITY_ID }), env());
+    const first = idemKeys.slice();
+    idemKeys.length = 0;
+    await submit(submission({ opportunityId: OPPORTUNITY_ID }), env());
+    assert.deepEqual(idemKeys, first);
+    assert.ok(first.some((k) => /^pc-[0-9a-f]{40}:deposit-invoice$/.test(k)));
+    assert.ok(first.some((k) => /^pc-[0-9a-f]{40}:schedule$/.test(k)));
+    assert.equal(first.join('').includes(EMAIL), false);
+    idemKeys.length = 0;
+    await submit(submission({ opportunityId: OPPORTUNITY_ID, deposit: 3000 }), env());
+    assert.notDeepEqual(idemKeys, first);
+  });
+});
+
