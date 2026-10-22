@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   DEFAULT_FIXED_PRICE, MIN_MONTHLY_PAYMENT, DEFAULT_SLIDING_SCALE_MAX,
-  SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL,
+  SLIDING_SCALE_STEP, DEFAULT_MIN, DEPOSIT_PRESETS, SUBMISSION_API_URL, SUBMIT_CONTACT_OFFICE_MESSAGE,
   formatDate, formatCurrency, isValidEmail, parseDueDate, getOneMonthBefore,
   getPayoffDate, getFirstInvoiceDate, parseUrlParams, getMaxMonths,
   calculateDefaultSlidingPrice, calculateMinDeposit, calculateDeposit, getWarnings,
@@ -686,14 +686,9 @@ function App() {
       });
 
       if (!response.ok) {
-        let message = `HTTP error! status: ${response.status}`;
-        try {
-          const errBody = await response.json();
-          if (errBody?.error) message = errBody.error;
-        } catch {
-          // Keep the status line when the body isn't JSON.
-        }
-        throw new Error(message);
+        // JRDO-169: duplicates and flow errors never create or reuse a plan;
+        // the patient is told to contact the office.
+        throw new Error(SUBMIT_CONTACT_OFFICE_MESSAGE);
       }
 
       try {
@@ -713,7 +708,7 @@ function App() {
       setSubmitSuccess(true);
     } catch (error) {
       console.error('Submission error:', error);
-      setSubmitError(error.message || 'Failed to submit. Please try again.');
+      setSubmitError(SUBMIT_CONTACT_OFFICE_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }
